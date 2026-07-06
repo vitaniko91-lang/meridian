@@ -4,7 +4,9 @@ export type Tier = {
   maxDpr: number
 }
 
-export function chooseTier(env: { hasWebGPU: boolean; isMobile: boolean }): Tier {
+export type Env = { hasWebGPU: boolean; isMobile: boolean }
+
+export function chooseTier(env: Env): Tier {
   if (env.hasWebGPU) {
     return env.isMobile
       ? { backend: 'webgpu', count: 300_000, maxDpr: 1.5 }
@@ -15,7 +17,7 @@ export function chooseTier(env: { hasWebGPU: boolean; isMobile: boolean }): Tier
     : { backend: 'webgl2', count: 200_000, maxDpr: 1.5 }
 }
 
-export function detectEnv(): { hasWebGPU: boolean; isMobile: boolean } {
+export function detectEnv(): Env {
   return {
     hasWebGPU: typeof navigator !== 'undefined' && 'gpu' in navigator,
     isMobile: typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches,

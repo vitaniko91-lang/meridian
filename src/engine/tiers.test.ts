@@ -12,10 +12,12 @@ describe('chooseTier', () => {
       backend: 'webgl2', count: 200_000, maxDpr: 1.5,
     })
   })
-  it('halves counts and caps dpr on mobile', () => {
+  it('reduces count and caps dpr on webgpu mobile', () => {
     expect(chooseTier({ hasWebGPU: true, isMobile: true })).toEqual({
       backend: 'webgpu', count: 300_000, maxDpr: 1.5,
     })
+  })
+  it('reduces count and caps dpr on webgl2 mobile', () => {
     expect(chooseTier({ hasWebGPU: false, isMobile: true })).toEqual({
       backend: 'webgl2', count: 80_000, maxDpr: 1.25,
     })
