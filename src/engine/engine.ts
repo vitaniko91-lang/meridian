@@ -7,7 +7,11 @@ export type Engine = {
   dispose: () => void
 }
 
-export async function createEngine(canvas: HTMLCanvasElement, hud: HTMLElement): Promise<Engine> {
+export async function createEngine(
+  canvas: HTMLCanvasElement,
+  hud: HTMLElement,
+  signal?: AbortSignal,
+): Promise<Engine> {
   const env = detectEnv()
   const tier = chooseTier(env)
 
@@ -17,6 +21,10 @@ export async function createEngine(canvas: HTMLCanvasElement, hud: HTMLElement):
     forceWebGL: tier.backend === 'webgl2',
   })
   await renderer.init()
+  if (signal?.aborted) {
+    renderer.dispose()
+    throw new DOMException('Engine creation aborted', 'AbortError')
+  }
   renderer.setPixelRatio(Math.min(devicePixelRatio, tier.maxDpr))
   renderer.setSize(innerWidth, innerHeight, false)
   renderer.setClearColor(0x0b0a08)
@@ -29,6 +37,7 @@ export async function createEngine(canvas: HTMLCanvasElement, hud: HTMLElement):
   const onResize = () => {
     camera.aspect = innerWidth / innerHeight
     camera.updateProjectionMatrix()
+    renderer.setPixelRatio(Math.min(devicePixelRatio, tier.maxDpr))
     renderer.setSize(innerWidth, innerHeight, false)
   }
   addEventListener('resize', onResize)
@@ -44,9 +53,10 @@ export async function createEngine(canvas: HTMLCanvasElement, hud: HTMLElement):
   return {
     tier,
     dispose() {
-      renderer.setAnimationLoop(null)
       removeEventListener('resize', onResize)
+      // three r185 Renderer.dispose() calls setAnimationLoop(null) internally
       renderer.dispose()
+      delete (globalThis as any).__meridian
     },
   }
 }

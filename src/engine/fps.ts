@@ -8,6 +8,7 @@ export function createFpsMeter(el: HTMLElement) {
     if (now - last >= 1000) {
       const fps = Math.round((frames * 1000) / (now - last))
       samples.push(fps)
+      if (samples.length > 60) samples.shift() // rolling window: last 60s only
       el.textContent = `${fps} fps · p5 ${p5()}`
       frames = 0
       last = now

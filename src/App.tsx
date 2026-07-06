@@ -7,15 +7,24 @@ export default function App() {
   const [backend, setBackend] = useState('…')
 
   useEffect(() => {
+    const ac = new AbortController()
     let disposed = false
     let dispose = () => {}
-    createEngine(canvasRef.current!, hudRef.current!).then((engine) => {
-      if (disposed) return engine.dispose()
-      dispose = engine.dispose
-      setBackend(engine.tier.backend)
-    })
+    createEngine(canvasRef.current!, hudRef.current!, ac.signal)
+      .then((engine) => {
+        if (disposed) return engine.dispose()
+        dispose = engine.dispose
+        setBackend(engine.tier.backend)
+      })
+      .catch((err) => {
+        if (err?.name !== 'AbortError') {
+          console.error('[meridian] engine init failed', err)
+          setBackend('error')
+        }
+      })
     return () => {
       disposed = true
+      ac.abort()
       dispose()
     }
   }, [])
