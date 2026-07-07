@@ -7,6 +7,7 @@ import { parseOverrides } from './overrides'
 
 export type Engine = {
   tier: Tier
+  setT: (t: number) => void
   dispose: () => void
 }
 
@@ -78,22 +79,22 @@ export async function createEngine(
   addEventListener('pointermove', onPointerMove)
 
   // Camera rail: chase a target narrative time along the route spline.
-  // Temporary keyboard drive ('1'/'2'/'3' → 0/0.5/1) until Task 6's scroll harness.
+  // Scroll (src/scroll.ts) drives tTarget via setT; the loop smooths toward it.
   let tTarget = 0
   let tSmooth = 0
   const camOffset = new THREE.Vector3(0, 1.2, 7)
   const camPoint = new THREE.Vector3()
   const lookPoint = new THREE.Vector3()
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === '1') tTarget = 0
-    else if (e.key === '2') tTarget = 0.5
-    else if (e.key === '3') tTarget = 1
-  }
-  addEventListener('keydown', onKeyDown)
 
-  renderer.setAnimationLoop(() => {
+  let lastTime = -1
+  renderer.setAnimationLoop((time: number) => {
     fps.tick()
-    tSmooth += (tTarget - tSmooth) * 0.06
+    // Frame-rate independent exponential smoothing: equals the old 0.06/frame
+    // at 60fps, but converges identically at 30 or 120fps. dt clamped at 50ms
+    // so tab-switch pauses don't teleport the camera.
+    const dt = lastTime < 0 ? 1 / 60 : Math.min((time - lastTime) / 1000, 0.05)
+    lastTime = time
+    tSmooth += (tTarget - tSmooth) * (1 - Math.pow(1 - 0.06, dt * 60))
     river.uT.value = tSmooth // hero particle rides with the camera
     route.curve.getPointAt(tSmooth, camPoint)
     camera.position.copy(camPoint).add(camOffset)
@@ -114,10 +115,14 @@ export async function createEngine(
 
   return {
     tier,
+    setT(t: number) {
+      // Feeds the camera-rail smoothing input — NOT river.uT directly —
+      // so the hero particle and camera stay in lockstep through tSmooth.
+      tTarget = t
+    },
     dispose() {
       removeEventListener('resize', onResize)
       removeEventListener('pointermove', onPointerMove)
-      removeEventListener('keydown', onKeyDown)
       // river → renderer, same order as the abort path (route is CPU-only now —
       // its uniformArray buffer is freed with the renderer);
       // three r185 Renderer.dispose() calls setAnimationLoop(null) internally

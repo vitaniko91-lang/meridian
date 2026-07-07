@@ -131,8 +131,8 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     // Phase wrap (route tail → head) yanks the target ~48 units away; instead
     // of streaking across the scene (and past the camera rail as a giant
     // near-camera sprite), such particles respawn at their new target.
-    // Discrete respawn, not a rate — no dtScale. Threshold 12 still lets the
-    // initial seed cloud converge visibly.
+    // Discrete respawn, not a rate — no dtScale. Threshold 12 lets nearby seed
+    // particles converge visibly; farther ones respawn on frame 1.
     const toTarget = target.add(swirl).sub(p).toVar()
     If(toTarget.length().greaterThan(12), () => {
       p.assign(target.add(swirl))
