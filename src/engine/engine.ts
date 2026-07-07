@@ -1,6 +1,7 @@
 import * as THREE from 'three/webgpu'
 import { chooseTier, detectEnv, type Tier } from './tiers'
 import { createFpsMeter } from './fps'
+import { createRiver } from './river'
 
 export type Engine = {
   tier: Tier
@@ -33,6 +34,15 @@ export async function createEngine(
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200)
   camera.position.set(0, 0, 12)
 
+  const river = createRiver(tier.count)
+  scene.add(river.mesh)
+  await renderer.computeAsync(river.init)
+  if (signal?.aborted) {
+    river.dispose()
+    renderer.dispose()
+    throw new DOMException('Engine creation aborted', 'AbortError')
+  }
+
   const fps = createFpsMeter(hud)
   const onResize = () => {
     camera.aspect = innerWidth / innerHeight
@@ -42,20 +52,37 @@ export async function createEngine(
   }
   addEventListener('resize', onResize)
 
+  // pointer → world plane z=0 (feeds river repulsion uniform)
+  const raycaster = new THREE.Raycaster()
+  const ndc = new THREE.Vector2()
+  const pointerPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+  const pointerHit = new THREE.Vector3()
+  const onPointerMove = (e: PointerEvent) => {
+    ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1)
+    raycaster.setFromCamera(ndc, camera)
+    if (raycaster.ray.intersectPlane(pointerPlane, pointerHit)) {
+      river.uPointer.value.copy(pointerHit)
+    }
+  }
+  addEventListener('pointermove', onPointerMove)
+
   renderer.setAnimationLoop(() => {
     fps.tick()
+    renderer.compute(river.update)
     renderer.render(scene, camera)
   })
 
   // exposed for later tasks
-  ;(globalThis as any).__meridian = { renderer, scene, camera, tier }
+  ;(globalThis as any).__meridian = { renderer, scene, camera, tier, river }
 
   return {
     tier,
     dispose() {
       removeEventListener('resize', onResize)
+      removeEventListener('pointermove', onPointerMove)
       // three r185 Renderer.dispose() calls setAnimationLoop(null) internally
       renderer.dispose()
+      river.dispose()
       delete (globalThis as any).__meridian
     },
   }
