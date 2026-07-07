@@ -5,19 +5,27 @@ import {
   cos,
   deltaTime,
   float,
+  fract,
   hash,
   instancedArray,
   instanceIndex,
+  select,
   sin,
+  texture,
   time,
   uniform,
+  vec2,
   vec3,
   vec4,
 } from 'three/tsl'
 
 /**
- * GPU particle river: a loose ribbon of additive gold sprites advected along
- * +X by a pseudo-curl flow field, with pointer repulsion for tactility.
+ * GPU particle river advected along the narrative route spline: each particle
+ * owns a phase drifting forward along the route (sampled from a data texture)
+ * with lateral swirl for body, plus pointer repulsion for tactility.
+ *
+ * Instance 0 is the hero particle — pinned exactly onto the route at the
+ * narrative time `uT`, rendered larger and brighter.
  *
  * Buffers live entirely on the GPU (`instancedArray` storage); the CPU only
  * dispatches kernels. Mirrors the official three.js compute-particles idiom
@@ -30,7 +38,7 @@ export type River = {
   init: THREE.ComputeNode
   /** Per-frame advection kernel — run via `renderer.compute(river.update)` in the loop. */
   update: THREE.ComputeNode
-  /** Narrative time 0..1 (scroll-driven in a later task). */
+  /** Narrative time 0..1 — hero particle rides the route at this phase. */
   uT: THREE.UniformNode<'float', number>
   /** World-space pointer for repulsion; parked far away until first pointermove. */
   uPointer: THREE.UniformNode<'vec3', THREE.Vector3>
@@ -47,9 +55,9 @@ export type River = {
   dispose: () => void
 }
 
-const RIBBON_HALF_LENGTH = 20 // world units; ribbon spans x in [-20, 20]
+const SEED_HALF_LENGTH = 20 // world units; initial cloud spans x in [-20, 20]
 
-export function createRiver(count: number): River {
+export function createRiver(count: number, routeTex: THREE.DataTexture): River {
   const positions = instancedArray(count, 'vec3')
   const velocities = instancedArray(count, 'vec3')
 
@@ -60,19 +68,21 @@ export function createRiver(count: number): River {
   const uScale = uniform(0.6)
   const uAlpha = uniform(0.5)
 
-  // One-time init kernel: seed a loose ribbon along X.
+  // One-time init kernel: seed a loose cloud along X; route steering pulls
+  // everything onto the spline within the first second.
   const init = Fn(() => {
     const p = positions.element(instanceIndex)
     const seed = hash(instanceIndex)
     const seed2 = hash(instanceIndex.add(1234))
     const seed3 = hash(instanceIndex.add(9876))
-    p.x = seed.mul(40).sub(RIBBON_HALF_LENGTH)
+    p.x = seed.mul(40).sub(SEED_HALF_LENGTH)
     p.y = seed2.sub(0.5).mul(2)
     p.z = seed3.sub(0.5).mul(2)
     velocities.element(instanceIndex).assign(vec3(0.02, 0, 0))
   })().compute(count)
 
-  // Per-frame kernel: advect along +X with pseudo-curl swirl + pointer avoidance.
+  // Per-frame kernel: steer each particle toward its drifting phase point on
+  // the route spline + lateral swirl + pointer avoidance.
   // All rates are tuned for a 60fps reference frame and scaled by dtScale so the
   // river flows at the same world speed on 60Hz, 120Hz, or a stuttering tab.
   const update = Fn(() => {
@@ -82,18 +92,30 @@ export function createRiver(count: number): River {
     // deltaTime normalized to 60fps frames; clamped to guard huge tab-switch deltas.
     const dtScale = deltaTime.mul(60).min(3)
 
-    // Weak spring toward the ribbon core (y=0, z=0) so pointer kicks don't
-    // permanently diffuse the ribbon. Task 5's route attraction extends this term.
-    v.addAssign(vec3(float(0), p.y.mul(-0.001), p.z.mul(-0.001)).mul(dtScale))
+    // Each particle owns a phase along the route, drifting forward with time;
+    // fract() wraps it, replacing the old x-wrap (particles respawn at the head).
+    const progress = fract(hash(instanceIndex).add(time.mul(0.02)))
+    const target = texture(routeTex, vec2(progress, 0.5)).xyz
 
+    // Lateral swirl gives the river body; amplitude varies per particle so the
+    // stream has a dense core and loose fringes.
+    const swirlAmp = hash(instanceIndex.add(42)).add(0.3).mul(0.35)
     const swirl = vec3(
       float(0),
-      sin(p.x.mul(0.35).add(time.mul(0.6))).mul(0.004),
-      cos(p.x.mul(0.28).add(time.mul(0.45))).mul(0.004),
+      sin(progress.mul(40).add(time)).mul(swirlAmp),
+      cos(progress.mul(38).add(time.mul(0.8))).mul(swirlAmp),
     )
-    v.assign(
-      v.mul(float(0.985).pow(dtScale)).add(swirl.mul(dtScale)).add(vec3(0.0006, 0, 0).mul(dtScale)),
-    )
+
+    // Steer toward the (swirled) route point. This IS the restoring force now —
+    // it replaces the old y/z spring toward the ribbon core AND the constant +X
+    // drift: the drifting phase supplies forward motion, the spring pulls back in.
+    // dtScale discipline: the 0.94 steering damping replaces the old 0.985
+    // (steering gain 0.04 is far stronger than the old accumulative terms and
+    // needs heavier damping to converge instead of orbiting the target); as a
+    // per-reference-frame decay it goes through pow(dtScale), and the additive
+    // steering impulse through .mul(dtScale), same as every other term.
+    const desired = target.add(swirl).sub(p).mul(0.04)
+    v.assign(v.mul(float(0.94).pow(dtScale)).add(desired.mul(dtScale)))
 
     // Pointer repulsion (tactility proof).
     const toPointer = p.sub(uPointer)
@@ -103,21 +125,32 @@ export function createRiver(count: number): River {
     })
 
     p.addAssign(v.mul(dtScale))
-    // Wrap the ribbon: x > 20 → back to -20.
-    If(p.x.greaterThan(RIBBON_HALF_LENGTH), () => {
-      p.x.subAssign(RIBBON_HALF_LENGTH * 2)
+
+    // Hero particle: instance 0 rides the route exactly at narrative time uT —
+    // pinned after integration so no force can pull it off the rail.
+    If(instanceIndex.equal(0), () => {
+      p.assign(texture(routeTex, vec2(uT, 0.5)).xyz)
+      v.assign(vec3(0))
     })
   })().compute(count)
 
-  // Additive gold sprites.
+  // Additive gold sprites; hero (instance 0) is 4× larger and brighter.
   const material = new THREE.SpriteNodeMaterial({
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     transparent: true,
   })
   material.positionNode = positions.toAttribute()
-  material.colorNode = vec4(vec3(0.91, 0.76, 0.46), float(0.55).mul(uAlpha)) // #E8C275 as light
-  material.scaleNode = float(0.02).add(hash(instanceIndex).mul(0.02)).mul(uScale)
+  const isHero = instanceIndex.equal(0)
+  material.colorNode = select(
+    isHero,
+    vec4(1.0, 0.88, 0.62, 1),
+    vec4(vec3(0.91, 0.76, 0.46), float(0.55).mul(uAlpha)), // #E8C275 as light
+  )
+  material.scaleNode = float(0.02)
+    .add(hash(instanceIndex).mul(0.02))
+    .mul(uScale)
+    .mul(select(isHero, float(4), float(1)))
 
   const mesh = new THREE.Sprite(material)
   mesh.count = count

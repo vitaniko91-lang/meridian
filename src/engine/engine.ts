@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu'
 import { chooseTier, detectEnv, type Tier } from './tiers'
 import { createFpsMeter } from './fps'
 import { createRiver } from './river'
+import { createRoute } from './route'
 import { parseOverrides } from './overrides'
 
 export type Engine = {
@@ -41,13 +42,15 @@ export async function createEngine(
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200)
   camera.position.set(0, 0, 12)
 
-  const river = createRiver(tier.count)
+  const route = createRoute()
+  const river = createRiver(tier.count, route.tex)
   if (overrides.scale !== undefined) river.uScale.value = overrides.scale
   if (overrides.alpha !== undefined) river.uAlpha.value = overrides.alpha
   scene.add(river.mesh)
   await renderer.computeAsync(river.init)
   if (signal?.aborted) {
     river.dispose()
+    route.tex.dispose()
     renderer.dispose()
     throw new DOMException('Engine creation aborted', 'AbortError')
   }
@@ -75,14 +78,34 @@ export async function createEngine(
   }
   addEventListener('pointermove', onPointerMove)
 
+  // Camera rail: chase a target narrative time along the route spline.
+  // Temporary keyboard drive ('1'/'2'/'3' → 0/0.5/1) until Task 6's scroll harness.
+  let tTarget = 0
+  let tSmooth = 0
+  const camOffset = new THREE.Vector3(0, 1.2, 7)
+  const camPoint = new THREE.Vector3()
+  const lookPoint = new THREE.Vector3()
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === '1') tTarget = 0
+    else if (e.key === '2') tTarget = 0.5
+    else if (e.key === '3') tTarget = 1
+  }
+  addEventListener('keydown', onKeyDown)
+
   renderer.setAnimationLoop(() => {
     fps.tick()
+    tSmooth += (tTarget - tSmooth) * 0.06
+    river.uT.value = tSmooth // hero particle rides with the camera
+    route.curve.getPointAt(tSmooth, camPoint)
+    camera.position.copy(camPoint).add(camOffset)
+    route.curve.getPointAt(Math.min(tSmooth + 0.04, 1), lookPoint)
+    camera.lookAt(lookPoint)
     renderer.compute(river.update)
     renderer.render(scene, camera)
   })
 
   // exposed for later tasks
-  ;(globalThis as any).__meridian = { renderer, scene, camera, tier, river }
+  ;(globalThis as any).__meridian = { renderer, scene, camera, tier, river, route }
 
   // dev-only fps sweep instrument — lazy, zero cost without ?sweep
   // (startSweep is a module singleton, so a StrictMode double-mount can't double-start it)
@@ -95,9 +118,11 @@ export async function createEngine(
     dispose() {
       removeEventListener('resize', onResize)
       removeEventListener('pointermove', onPointerMove)
-      // river → renderer, same order as the abort path;
+      removeEventListener('keydown', onKeyDown)
+      // river → route tex → renderer, same order as the abort path;
       // three r185 Renderer.dispose() calls setAnimationLoop(null) internally
       river.dispose()
+      route.tex.dispose()
       renderer.dispose()
       delete (globalThis as any).__meridian
     },
