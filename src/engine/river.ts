@@ -12,6 +12,7 @@ import {
   mix,
   select,
   sin,
+  smoothstep,
   time,
   uniform,
   uniformArray,
@@ -19,6 +20,7 @@ import {
   vec4,
 } from 'three/tsl'
 import { ROUTE_SAMPLES } from './route'
+import { PRISM_AT, PRISM_HALF, prismFan, prismWindow, spectral } from './prism'
 
 /**
  * GPU particle river advected along the narrative route spline: each particle
@@ -63,6 +65,25 @@ export type River = {
 }
 
 const SEED_HALF_LENGTH = 20 // world units; initial cloud spans x in [-20, 20]
+
+/**
+ * Per-particle phase along the route — the SAME expression is evaluated in the
+ * update kernel (compute pass) and the material colorNode (render pass), and
+ * they must agree so the spectral tint lands exactly on the fanned particles.
+ *
+ * Why that's safe in r185: `time` is a renderGroup uniform whose value comes
+ * from `NodeFrame.time`, and NodeFrame.update() — the only place time advances
+ * (Timer.js → onRenderUpdate((frame) => frame.time)) — is called ONCE per rAF
+ * tick in Animation.js:77, BEFORE the user animation-loop callback runs.
+ * `renderer.compute()` and `renderer.render()` only re-stamp
+ * `nodeFrame.renderId` (forcing the uniform callback to re-run) but read the
+ * same frozen `frame.time` — so compute and render within one frame see
+ * identical time, and this expression is deterministic on (instanceIndex, time).
+ */
+const particleProgress = () => fract(hash(instanceIndex).add(time.mul(0.02)))
+
+/** Static per-particle wavelength for the prism dispersion, hue ∈ [0,1]. */
+const particleHue = () => hash(instanceIndex.add(777))
 
 export function createRiver(count: number, routePoints: THREE.Vector3[]): River {
   const positions = instancedArray(count, 'vec3')
@@ -116,7 +137,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
 
     // Each particle owns a phase along the route, drifting forward with time;
     // fract() wraps it, replacing the old x-wrap (particles respawn at the head).
-    const progress = fract(hash(instanceIndex).add(time.mul(0.02)))
+    const progress = particleProgress()
     const target = sampleRoute(progress)
 
     // Lateral swirl gives the river body; amplitude varies per particle so the
@@ -151,6 +172,14 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     const desired = toTarget.mul(0.04)
     v.assign(v.mul(float(0.94).pow(dtScale)).add(desired.mul(dtScale)))
 
+    // Prism dispersion: inside the window the stream fans into a spectrum band —
+    // a per-wavelength lateral impulse spreads particles by hue; the steering
+    // spring above re-converges them once the phase drifts past the window.
+    // Applied AFTER the wrap guard (which zeroes v) so a wrap-snap can't fight
+    // the fan; max offset ~±0.9 units stays far under the 12-unit snap radius.
+    const inWindow = prismWindow(progress)
+    v.addAssign(prismFan(particleHue(), inWindow).mul(0.05).mul(dtScale))
+
     // Pointer repulsion (tactility proof).
     const toPointer = p.sub(uPointer)
     const dist = toPointer.length().max(0.0001)
@@ -176,10 +205,24 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   })
   material.positionNode = positions.toAttribute()
   const isHero = instanceIndex.equal(0)
+  // Body: gold everywhere, spectral ONLY inside the prism window. The phase is
+  // recomputed here with the SAME expression as the update kernel — see the
+  // particleProgress note on why compute and render agree within a frame.
+  const bodyProgress = particleProgress()
+  const bodyColor = mix(
+    vec3(0.91, 0.76, 0.46), // #E8C275 as light
+    spectral(particleHue()),
+    prismWindow(bodyProgress),
+  )
+  // Hero conversion: once narrative time uT passes the prism, the hero's warm
+  // gold permanently shifts to the "new currency" cool light — driven by uT
+  // (not particle phase), so the change persists after the window.
+  const converted = smoothstep(float(PRISM_AT), float(PRISM_AT + PRISM_HALF), float(uT))
+  const heroColor = mix(vec3(1.0, 0.88, 0.62), vec3(0.72, 0.86, 1.0), converted)
   material.colorNode = select(
     isHero,
-    vec4(1.0, 0.88, 0.62, 1),
-    vec4(vec3(0.91, 0.76, 0.46), float(0.55).mul(uAlpha)), // #E8C275 as light
+    vec4(heroColor, 1),
+    vec4(bodyColor, float(0.55).mul(uAlpha)),
   )
   material.scaleNode = float(0.02)
     .add(hash(instanceIndex).mul(0.02))
