@@ -1,6 +1,8 @@
-// Unattended fps benchmark: drives the dev server through real Chrome with
-// background throttling disabled, so measurements don't depend on window focus.
-// Usage: node scripts/bench.mjs (dev server must be running on :5199)
+// Unattended fps benchmark: drives real Chrome with background throttling
+// disabled, so measurements don't depend on window focus.
+// Usage: run against a PRODUCTION preview on :5199 — `npm run build && npm run
+// bench:serve`, then `node scripts/bench.mjs`. NEVER bench the dev server: its
+// StrictMode double-mount path is what contaminated the original numbers.
 import { chromium } from 'playwright-core'
 
 const BASE = 'http://localhost:5199/'

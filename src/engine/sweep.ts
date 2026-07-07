@@ -17,6 +17,11 @@
  * localStorage.meridianResults, then navigates to the next queue entry.
  * If the tab goes hidden mid-measure the sample is discarded and the
  * measurement re-arms on the next visibilitychange→visible (idempotent).
+ *
+ * KNOWN BUG: a hidden-throttled ~0.2fps sample can be saved past the
+ * document.hidden guard (the guard only fires if rAF ticks while hidden).
+ * Superseded by scripts/bench.mjs for unattended runs; fix-or-delete
+ * scheduled for Plan 3.
  */
 
 const QUEUE_KEY = 'meridianQueue'

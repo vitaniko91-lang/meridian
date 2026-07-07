@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "bench:serve": "vite preview --port 5199 --strictPort",
     "test": "vitest run"
   },
   "dependencies": {

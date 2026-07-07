@@ -25,6 +25,8 @@ Production preview, real Chrome, unattended playwright bench (`scripts/bench.mjs
 
 **CAVEAT (thermal):** scroll-time fps and late-session numbers are thermally contaminated — the Air heat-soaks; idle fps varied 60→32→43 with no code change. Definitive scroll-under-load fps needs a cold single-run protocol → Plan 3 QA. This is also the live argument for spec §11 adaptive quality.
 
+![Default tier: webgl2 300k @ dpr2 particle river](river-default-tier.png)
+
 ## 2. Prism: GO (Vitalina, 2026-07-07)
 
 - Spectral fan reads as optics: hue-ordered, widening + re-converging.
@@ -32,6 +34,10 @@ Production preview, real Chrome, unattended playwright bench (`scripts/bench.mjs
 - Hero conversion (gold → currency color) persists after the window.
 - Backends identical (webgl2 vs webgpu).
 - **Tuning carry-forward:** fan core saturates white at high counts — saturation / window-alpha knob → Plan 3 art pass.
+
+![Prism dispersion: hue-ordered spectral fan at the route window](prism-01-dispersion.png)
+
+![Hero particle converted to the new currency color past the window](prism-02-hero-converted.png)
 
 ## 3. Root-cause log
 
@@ -54,6 +60,8 @@ Production preview, real Chrome, unattended playwright bench (`scripts/bench.mjs
 - Chunk graph: three lives only in the `App-*.js` chunk (~993 KB / 287 KB gzip), reachable **only** via dynamic `import()`; entry chunk is React-only (~192 KB / 61 KB gzip), no modulepreload of the App chunk.
 - Runtime (Chrome `--force-prefers-reduced-motion`, production preview): `performance.getEntriesByType('resource')` shows entry + `AppStatic-*.js` only — the three chunk is **never fetched**. Without the flag: canvas + `globalThis.__meridian` (`webgl2`, 300k) appear.
 - `AppStatic.tsx` is a placeholder poster (CSS gradient); real poster art → Plan 2.
+
+![Reduced-motion poster shell — zero three.js bytes fetched](reduced-motion-poster.png)
 
 ## 6. Instruments in repo
 
