@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ChapterSection from './components/ChapterSection'
+import ContactForm from './components/ContactForm'
 import Headline from './components/Headline'
 import Reveal from './components/Reveal'
 import SiteFooter from './components/SiteFooter'
@@ -87,8 +88,7 @@ export default function App() {
             <Reveal>
               <Headline as="h2" id="contact-h" segs={CTA.headline} className="text-[clamp(1.75rem,4vw,2.5rem)] leading-tight" />
               <p className="mt-5 text-[15px] leading-relaxed text-ivory/85">{CTA.body}</p>
-              {/* Task 5 replaces this slot with the contact form */}
-              <div data-slot="contact-form" className="mt-8" />
+              <ContactForm />
             </Reveal>
           </div>
         </section>
