@@ -50,9 +50,9 @@ export default function App() {
   return (
     <main className="h-[400lvh]">
       <canvas ref={canvasRef} className="fixed inset-0 h-[100lvh] w-full" />
-      <div ref={hudRef} className="fixed right-3 top-3 font-mono text-xs text-[#E8C275]" />
-      <div className="fixed left-3 top-3 font-mono text-xs text-[#8A8071]">{backend}</div>
-      <div ref={timerRef} aria-hidden="true" className="fixed bottom-3 left-3 font-mono text-sm text-[#E8C275]">
+      <div ref={hudRef} className="fixed right-3 top-3 font-mono text-xs text-gold" />
+      <div className="fixed left-3 top-3 font-mono text-xs text-muted">{backend}</div>
+      <div ref={timerRef} aria-hidden="true" className="fixed bottom-3 left-3 font-mono text-sm text-gold">
         t = 0.000s
       </div>
     </main>

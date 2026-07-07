@@ -1,1 +1,20 @@
+@import './fonts.css';
 @import "tailwindcss";
+
+@theme {
+  --color-vault: #0B0A08;
+  --color-gold: #E8C275;
+  --color-ivory: #F2EDE3;
+  --color-muted: #8A8071;
+  --color-steel: #5A6B7A;
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-sans: 'Satoshi', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ivory);
+  }
+}
