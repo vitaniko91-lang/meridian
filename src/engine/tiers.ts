@@ -14,20 +14,24 @@ export type Env = {
 /**
  * WEBGL2-FIRST — measured verdict, not a fallback.
  *
- * Bench 2026-07-07 (MacBook Air, unattended playwright-core run, scripts/bench.mjs,
- * background throttling disabled; avg fps / min 1s-bucket over 6s after 3s warmup):
+ * Re-bench 2026-07-07 on the PRODUCTION preview build, post-d836f13 — the
+ * original same-day bench was INVALIDATED by the StrictMode context-loss bug
+ * (it measured rAF on a device-lost white canvas); the webgl2-first
+ * conclusion survived honest re-measurement with real rendering verified on
+ * both backends. (MacBook Air, unattended playwright-core run,
+ * scripts/bench.mjs, background throttling disabled; avg fps / min 1s-bucket
+ * over 6s after 3s warmup):
  *
- *   webgl2  500k @ dpr1.5 → 60 / 58
- *   webgl2  300k @ dpr2   → 60 / 60
- *   webgl2  200k @ dpr1.5 → 59 / 58
- *   webgpu   50k          → 60        (cliffs at 100k → 41 fps)
- *   webgpu  300k          → 38        (barely count-sensitive → ~fixed per-frame overhead)
+ *   webgl2  300k @ dpr2 → 60 / 60   (the default tier)
+ *   webgl2  500k        → 31 / 26
+ *   webgpu  300k        → 40 / 35
+ *   webgpu  500k        → 28 / 25
+ *   webgpu    1M        → 14 / 13
  *
- * three r185's WebGPU backend carries a large fixed per-frame cost on this
- * machine while the WebGL2 path sustains 60fps at 500k. So webgl2 is the
- * DEFAULT regardless of WebGPU availability; the old WebGPU tiers stay
- * reachable via env.preferWebGPU (`?webgpu`) for re-benching on other
- * hardware / future three versions.
+ * The default webgl2 tier holds 60fps while every WebGPU config trails it at
+ * equal counts on this machine. So webgl2 is the DEFAULT regardless of WebGPU
+ * availability; the WebGPU tiers stay reachable via env.preferWebGPU
+ * (`?webgpu`) for re-benching on other hardware / future three versions.
  */
 export function chooseTier(env: Env): Tier {
   if (env.preferWebGPU && env.hasWebGPU) {

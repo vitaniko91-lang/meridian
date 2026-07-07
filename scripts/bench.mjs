@@ -4,13 +4,16 @@
 import { chromium } from 'playwright-core'
 
 const BASE = 'http://localhost:5199/'
+// The honest matrix behind the webgl2-first verdict in src/engine/tiers.ts
+// (re-bench 2026-07-07 on the production preview build; run against a
+// production `vite preview` — the dev-server StrictMode path was the source
+// of the original contaminated numbers).
 const CONFIGS = [
-  '?count=50000&dpr=1.5&scale=0.6&alpha=0.5',
-  '?count=100000&dpr=1.5&scale=0.6&alpha=0.5',
-  '?webgl&count=200000&dpr=1.5&scale=0.6&alpha=0.5',
-  '?webgl&count=300000&dpr=1.5&scale=0.6&alpha=0.5',
-  '?webgl&count=500000&dpr=1.5&scale=0.6&alpha=0.5',
-  '?webgl&count=300000&dpr=2&scale=0.6&alpha=0.5',
+  '', // default tier: webgl2 300k @ dpr2
+  '?count=500000', // webgl2 500k
+  '?webgpu', // webgpu default tier: 1M
+  '?webgpu&count=500000', // webgpu 500k
+  '?webgpu&count=300000', // webgpu 300k
 ]
 
 const WARMUP_MS = 3000
