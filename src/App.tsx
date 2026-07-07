@@ -1,4 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import ChapterSection from './components/ChapterSection'
+import Headline from './components/Headline'
+import Reveal from './components/Reveal'
+import SiteFooter from './components/SiteFooter'
+import SiteHeader from './components/SiteHeader'
+import { CHAPTERS, CTA, HERO } from './content/copy'
 import { createEngine } from './engine/engine'
 import { initScroll } from './scroll'
 
@@ -48,13 +54,46 @@ export default function App() {
   }, [])
 
   return (
-    <main className="h-[400lvh]">
-      <canvas ref={canvasRef} className="fixed inset-0 h-[100lvh] w-full" />
+    <>
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only fixed top-2 left-2 z-50 bg-vault text-gold px-3 py-2 font-mono text-xs"
+      >
+        Skip to content
+      </a>
+      <SiteHeader />
+      <canvas ref={canvasRef} className="fixed inset-0 -z-10 h-[100lvh] w-full" />
       <div ref={hudRef} className="fixed right-3 top-3 font-mono text-xs text-gold" />
       <div className="fixed left-3 top-3 font-mono text-xs text-muted">{backend}</div>
       <div ref={timerRef} aria-hidden="true" className="fixed bottom-3 left-3 font-mono text-sm text-gold">
         t = 0.000s
       </div>
-    </main>
+      <main id="main" className="relative">
+        <section className="flex min-h-[100lvh] items-center">
+          <div className="max-w-[640px] px-6 md:ml-[8vw]">
+            <Reveal>
+              <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-muted">{HERO.kicker}</p>
+              <Headline as="h1" segs={HERO.headline} className="mt-4 text-[clamp(2.5rem,6vw,4rem)] leading-tight" />
+              <p className="mt-6 max-w-[480px] leading-relaxed text-ivory/85">{HERO.sub}</p>
+              <p className="mt-10 font-mono text-xs text-gold">{HERO.cue} ↓</p>
+            </Reveal>
+          </div>
+        </section>
+        {CHAPTERS.map((c) => (
+          <ChapterSection key={c.id} c={c} />
+        ))}
+        <section id="contact" aria-labelledby="contact-h" className="flex min-h-[90lvh] items-center">
+          <div className="max-w-[560px] px-6 md:ml-[8vw]">
+            <Reveal>
+              <Headline as="h2" id="contact-h" segs={CTA.headline} className="text-[clamp(1.75rem,4vw,2.5rem)] leading-tight" />
+              <p className="mt-5 text-[15px] leading-relaxed text-ivory/85">{CTA.body}</p>
+              {/* Task 5 replaces this slot with the contact form */}
+              <div data-slot="contact-form" className="mt-8" />
+            </Reveal>
+          </div>
+        </section>
+      </main>
+      <SiteFooter />
+    </>
   )
 }
