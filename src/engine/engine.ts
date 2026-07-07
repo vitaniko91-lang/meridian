@@ -80,9 +80,10 @@ export async function createEngine(
     dispose() {
       removeEventListener('resize', onResize)
       removeEventListener('pointermove', onPointerMove)
+      // river → renderer, same order as the abort path;
       // three r185 Renderer.dispose() calls setAnimationLoop(null) internally
-      renderer.dispose()
       river.dispose()
+      renderer.dispose()
       delete (globalThis as any).__meridian
     },
   }

@@ -3,6 +3,7 @@ import {
   Fn,
   If,
   cos,
+  deltaTime,
   float,
   hash,
   instancedArray,
@@ -33,7 +34,12 @@ export type River = {
   uT: THREE.UniformNode<'float', number>
   /** World-space pointer for repulsion; parked far away until first pointermove. */
   uPointer: THREE.UniformNode<'vec3', THREE.Vector3>
-  /** Dispose GPU material. (Sprite geometry is module-shared in three — never disposed.) */
+  /**
+   * Dispose the GPU material. (Sprite geometry is module-shared in three — never disposed.)
+   * NOTE: the `instancedArray` storage buffers are GPU resources freed only by
+   * `renderer.dispose()` — a tier switch must NOT recreate rivers on a live
+   * renderer, or the old buffers leak for the renderer's lifetime.
+   */
   dispose: () => void
 }
 
@@ -59,25 +65,36 @@ export function createRiver(count: number): River {
   })().compute(count)
 
   // Per-frame kernel: advect along +X with pseudo-curl swirl + pointer avoidance.
+  // All rates are tuned for a 60fps reference frame and scaled by dtScale so the
+  // river flows at the same world speed on 60Hz, 120Hz, or a stuttering tab.
   const update = Fn(() => {
     const p = positions.element(instanceIndex)
     const v = velocities.element(instanceIndex)
+
+    // deltaTime normalized to 60fps frames; clamped to guard huge tab-switch deltas.
+    const dtScale = deltaTime.mul(60).min(3)
+
+    // Weak spring toward the ribbon core (y=0, z=0) so pointer kicks don't
+    // permanently diffuse the ribbon. Task 5's route attraction extends this term.
+    v.addAssign(vec3(float(0), p.y.mul(-0.001), p.z.mul(-0.001)).mul(dtScale))
 
     const swirl = vec3(
       float(0),
       sin(p.x.mul(0.35).add(time.mul(0.6))).mul(0.004),
       cos(p.x.mul(0.28).add(time.mul(0.45))).mul(0.004),
     )
-    v.assign(v.mul(0.985).add(swirl).add(vec3(0.0006, 0, 0)))
+    v.assign(
+      v.mul(float(0.985).pow(dtScale)).add(swirl.mul(dtScale)).add(vec3(0.0006, 0, 0).mul(dtScale)),
+    )
 
     // Pointer repulsion (tactility proof).
     const toPointer = p.sub(uPointer)
     const dist = toPointer.length().max(0.0001)
     If(dist.lessThan(1.5), () => {
-      v.addAssign(toPointer.div(dist).mul(float(1.5).sub(dist)).mul(0.01))
+      v.addAssign(toPointer.div(dist).mul(float(1.5).sub(dist)).mul(0.01).mul(dtScale))
     })
 
-    p.addAssign(v)
+    p.addAssign(v.mul(dtScale))
     // Wrap the ribbon: x > 20 → back to -20.
     If(p.x.greaterThan(RIBBON_HALF_LENGTH), () => {
       p.x.subAssign(RIBBON_HALF_LENGTH * 2)
