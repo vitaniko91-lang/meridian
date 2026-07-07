@@ -83,6 +83,12 @@ export async function createEngine(
   // exposed for later tasks
   ;(globalThis as any).__meridian = { renderer, scene, camera, tier, river }
 
+  // dev-only fps sweep instrument — lazy, zero cost without ?sweep
+  // (startSweep is a module singleton, so a StrictMode double-mount can't double-start it)
+  if (location.search.includes('sweep')) {
+    void import('./sweep').then(({ startSweep }) => startSweep(tier))
+  }
+
   return {
     tier,
     dispose() {
