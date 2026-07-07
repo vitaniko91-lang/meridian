@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu'
 import { chooseTier, detectEnv, type Tier } from './tiers'
 import { createFpsMeter } from './fps'
 import { createRiver } from './river'
+import { parseOverrides } from './overrides'
 
 export type Engine = {
   tier: Tier
@@ -13,8 +14,13 @@ export async function createEngine(
   hud: HTMLElement,
   signal?: AbortSignal,
 ): Promise<Engine> {
+  // dev tuning overrides for acceptance runs: ?count= ?dpr= ?webgl ?scale= ?alpha=
+  const overrides = parseOverrides(location.search)
   const env = detectEnv()
+  if (overrides.forceWebGL) env.hasWebGPU = false
   const tier = chooseTier(env)
+  if (overrides.count !== undefined) tier.count = overrides.count
+  if (overrides.dpr !== undefined) tier.maxDpr = overrides.dpr
 
   const renderer = new THREE.WebGPURenderer({
     canvas,
@@ -35,6 +41,8 @@ export async function createEngine(
   camera.position.set(0, 0, 12)
 
   const river = createRiver(tier.count)
+  river.uScale.value = overrides.scale
+  river.uAlpha.value = overrides.alpha
   scene.add(river.mesh)
   await renderer.computeAsync(river.init)
   if (signal?.aborted) {

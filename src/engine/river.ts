@@ -34,6 +34,10 @@ export type River = {
   uT: THREE.UniformNode<'float', number>
   /** World-space pointer for repulsion; parked far away until first pointermove. */
   uPointer: THREE.UniformNode<'vec3', THREE.Vector3>
+  /** Sprite scale multiplier, default 1 (art-tuning knob; `?scale=` dev override). */
+  uScale: THREE.UniformNode<'float', number>
+  /** Sprite alpha multiplier, default 1 (art-tuning knob; `?alpha=` dev override). */
+  uAlpha: THREE.UniformNode<'float', number>
   /**
    * Dispose the GPU material. (Sprite geometry is module-shared in three — never disposed.)
    * NOTE: the `instancedArray` storage buffers are GPU resources freed only by
@@ -51,6 +55,8 @@ export function createRiver(count: number): River {
 
   const uT = uniform(0)
   const uPointer = uniform(new THREE.Vector3(0, 0, 999))
+  const uScale = uniform(1)
+  const uAlpha = uniform(1)
 
   // One-time init kernel: seed a loose ribbon along X.
   const init = Fn(() => {
@@ -108,8 +114,8 @@ export function createRiver(count: number): River {
     transparent: true,
   })
   material.positionNode = positions.toAttribute()
-  material.colorNode = vec4(0.91, 0.76, 0.46, 0.55) // #E8C275 as light
-  material.scaleNode = float(0.02).add(hash(instanceIndex).mul(0.02))
+  material.colorNode = vec4(vec3(0.91, 0.76, 0.46), float(0.55).mul(uAlpha)) // #E8C275 as light
+  material.scaleNode = float(0.02).add(hash(instanceIndex).mul(0.02)).mul(uScale)
 
   const mesh = new THREE.Sprite(material)
   mesh.count = count
@@ -121,6 +127,8 @@ export function createRiver(count: number): River {
     update,
     uT,
     uPointer,
+    uScale,
+    uAlpha,
     dispose() {
       material.dispose()
     },
