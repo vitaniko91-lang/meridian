@@ -9,20 +9,22 @@ import {
   hash,
   instancedArray,
   instanceIndex,
+  mix,
   select,
   sin,
-  texture,
   time,
   uniform,
-  vec2,
+  uniformArray,
   vec3,
   vec4,
 } from 'three/tsl'
+import { ROUTE_SAMPLES } from './route'
 
 /**
  * GPU particle river advected along the narrative route spline: each particle
- * owns a phase drifting forward along the route (sampled from a data texture)
- * with lateral swirl for body, plus pointer repulsion for tactility.
+ * owns a phase drifting forward along the route (read from a uniform array —
+ * NOT a texture; see route.ts for why) with lateral swirl for body, plus
+ * pointer repulsion for tactility.
  *
  * Instance 0 is the hero particle — pinned exactly onto the route at the
  * narrative time `uT`, rendered larger and brighter.
@@ -47,6 +49,11 @@ export type River = {
   /** Sprite alpha multiplier, default 0.5 — bench-validated look (`?alpha=` dev override). */
   uAlpha: THREE.UniformNode<'float', number>
   /**
+   * Position storage node — debug/verification handle. Read positions back with
+   * `renderer.getArrayBufferAsync(river.positions.value)` (r185 common Renderer API).
+   */
+  positions: THREE.StorageBufferNode<'vec3'>
+  /**
    * Dispose the GPU material. (Sprite geometry is module-shared in three — never disposed.)
    * NOTE: the `instancedArray` storage buffers are GPU resources freed only by
    * `renderer.dispose()` — a tier switch must NOT recreate rivers on a live
@@ -57,9 +64,14 @@ export type River = {
 
 const SEED_HALF_LENGTH = 20 // world units; initial cloud spans x in [-20, 20]
 
-export function createRiver(count: number, routeTex: THREE.DataTexture): River {
+export function createRiver(count: number, routePoints: THREE.Vector3[]): River {
   const positions = instancedArray(count, 'vec3')
   const velocities = instancedArray(count, 'vec3')
+
+  // Route as a 256-entry vec3 uniform array (std140 UBO, 4KB padded) — works
+  // identically on the WebGL2 transform-feedback and WebGPU compute paths.
+  // (Chosen over a DataTexture tap: no sampler / float-filtering caveats.)
+  const route = uniformArray<'vec3'>(routePoints, 'vec3')
 
   const uT = uniform(0)
   const uPointer = uniform(new THREE.Vector3(0, 0, 999))
@@ -67,6 +79,16 @@ export function createRiver(count: number, routeTex: THREE.DataTexture): River {
   // blending at 300k+ — 0.6/0.5 is the validated look. `?scale=` `?alpha=` override.
   const uScale = uniform(0.6)
   const uAlpha = uniform(0.5)
+
+  // Linearly interpolated route lookup at u ∈ [0,1] (in-kernel, no sampler).
+  // Indices are clamped in float space before the int cast — @types/three r185
+  // doesn't type clamp/min on int nodes, and the result is identical.
+  const sampleRoute = (u: THREE.Node<'float'>) => {
+    const scaled = u.mul(ROUTE_SAMPLES - 1).clamp(0, ROUTE_SAMPLES - 1)
+    const i0 = scaled.floor().toInt()
+    const i1 = scaled.add(1).clamp(0, ROUTE_SAMPLES - 1).floor().toInt()
+    return mix(vec3(route.element(i0)), vec3(route.element(i1)), scaled.fract())
+  }
 
   // One-time init kernel: seed a loose cloud along X; route steering pulls
   // everything onto the spline within the first second.
@@ -95,7 +117,7 @@ export function createRiver(count: number, routeTex: THREE.DataTexture): River {
     // Each particle owns a phase along the route, drifting forward with time;
     // fract() wraps it, replacing the old x-wrap (particles respawn at the head).
     const progress = fract(hash(instanceIndex).add(time.mul(0.02)))
-    const target = texture(routeTex, vec2(progress, 0.5)).xyz
+    const target = sampleRoute(progress)
 
     // Lateral swirl gives the river body; amplitude varies per particle so the
     // stream has a dense core and loose fringes.
@@ -106,6 +128,18 @@ export function createRiver(count: number, routeTex: THREE.DataTexture): River {
       cos(progress.mul(38).add(time.mul(0.8))).mul(swirlAmp),
     )
 
+    // Phase wrap (route tail → head) yanks the target ~48 units away; instead
+    // of streaking across the scene (and past the camera rail as a giant
+    // near-camera sprite), such particles respawn at their new target.
+    // Discrete respawn, not a rate — no dtScale. Threshold 12 still lets the
+    // initial seed cloud converge visibly.
+    const toTarget = target.add(swirl).sub(p).toVar()
+    If(toTarget.length().greaterThan(12), () => {
+      p.assign(target.add(swirl))
+      v.assign(vec3(0))
+      toTarget.assign(vec3(0))
+    })
+
     // Steer toward the (swirled) route point. This IS the restoring force now —
     // it replaces the old y/z spring toward the ribbon core AND the constant +X
     // drift: the drifting phase supplies forward motion, the spring pulls back in.
@@ -114,7 +148,7 @@ export function createRiver(count: number, routeTex: THREE.DataTexture): River {
     // needs heavier damping to converge instead of orbiting the target); as a
     // per-reference-frame decay it goes through pow(dtScale), and the additive
     // steering impulse through .mul(dtScale), same as every other term.
-    const desired = target.add(swirl).sub(p).mul(0.04)
+    const desired = toTarget.mul(0.04)
     v.assign(v.mul(float(0.94).pow(dtScale)).add(desired.mul(dtScale)))
 
     // Pointer repulsion (tactility proof).
@@ -129,7 +163,7 @@ export function createRiver(count: number, routeTex: THREE.DataTexture): River {
     // Hero particle: instance 0 rides the route exactly at narrative time uT —
     // pinned after integration so no force can pull it off the rail.
     If(instanceIndex.equal(0), () => {
-      p.assign(texture(routeTex, vec2(uT, 0.5)).xyz)
+      p.assign(sampleRoute(float(uT).clamp(0, 1)))
       v.assign(vec3(0))
     })
   })().compute(count)
@@ -164,6 +198,7 @@ export function createRiver(count: number, routeTex: THREE.DataTexture): River {
     uPointer,
     uScale,
     uAlpha,
+    positions,
     dispose() {
       material.dispose()
     },

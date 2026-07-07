@@ -43,14 +43,13 @@ export async function createEngine(
   camera.position.set(0, 0, 12)
 
   const route = createRoute()
-  const river = createRiver(tier.count, route.tex)
+  const river = createRiver(tier.count, route.points)
   if (overrides.scale !== undefined) river.uScale.value = overrides.scale
   if (overrides.alpha !== undefined) river.uAlpha.value = overrides.alpha
   scene.add(river.mesh)
   await renderer.computeAsync(river.init)
   if (signal?.aborted) {
     river.dispose()
-    route.tex.dispose()
     renderer.dispose()
     throw new DOMException('Engine creation aborted', 'AbortError')
   }
@@ -119,10 +118,10 @@ export async function createEngine(
       removeEventListener('resize', onResize)
       removeEventListener('pointermove', onPointerMove)
       removeEventListener('keydown', onKeyDown)
-      // river → route tex → renderer, same order as the abort path;
+      // river → renderer, same order as the abort path (route is CPU-only now —
+      // its uniformArray buffer is freed with the renderer);
       // three r185 Renderer.dispose() calls setAnimationLoop(null) internally
       river.dispose()
-      route.tex.dispose()
       renderer.dispose()
       delete (globalThis as any).__meridian
     },

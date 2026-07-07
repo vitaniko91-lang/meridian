@@ -1,18 +1,25 @@
 import * as THREE from 'three/webgpu'
 
 /**
- * The narrative route: a CatmullRom spline sampled into a 256×1 float texture
- * so the particle update kernel can steer toward it with a single texture tap.
+ * The narrative route: a CatmullRom spline sampled into 256 equally-spaced
+ * points that the particle update kernel reads as a `uniformArray` (UBO).
+ *
+ * Why not a DataTexture: a uniform array is backend-agnostic by construction —
+ * std140 UBO on the WebGL2 transform-feedback path, uniform buffer on WebGPU —
+ * with no sampler, no float-filtering features (float32-filterable /
+ * OES_texture_float_linear) and no texture-in-compute question at all.
+ * Numerically verified on BOTH backends 2026-07-07 (position readback via
+ * renderer.getArrayBufferAsync: finite, on-route, full spread).
  *
  * CPU side keeps the curve for the camera rail (`curve.getPointAt`); GPU side
- * reads the same route from `tex` — both views stay in sync by construction.
+ * reads the same route from `points` — both views stay in sync by construction.
  */
 export const ROUTE_SAMPLES = 256
 
 export type Route = {
   curve: THREE.CatmullRomCurve3
-  /** 256×1 RGBA float texture; xyz = route point at u = texelIndex / (ROUTE_SAMPLES - 1). */
-  tex: THREE.DataTexture
+  /** ROUTE_SAMPLES equally-spaced points; index i ↔ u = i / (ROUTE_SAMPLES - 1). */
+  points: THREE.Vector3[]
 }
 
 // Placeholder spike route: a sweeping S-curve. Plan 3 replaces control
@@ -24,15 +31,6 @@ export function createRoute(): Route {
     new THREE.Vector3(6, -2, 3),
     new THREE.Vector3(24, 1, 0),
   ])
-  const pts = curve.getSpacedPoints(ROUTE_SAMPLES - 1)
-  const data = new Float32Array(ROUTE_SAMPLES * 4)
-  pts.forEach((p, i) => data.set([p.x, p.y, p.z, 0], i * 4))
-  const tex = new THREE.DataTexture(data, ROUTE_SAMPLES, 1, THREE.RGBAFormat, THREE.FloatType)
-  // Nearest keeps float32 textures samplable on both backends without the
-  // float32-filterable (WebGPU) / OES_texture_float_linear (WebGL2) features.
-  // 256 samples over a ~50-unit route ≈ 0.2-unit steps — plenty smooth here.
-  tex.minFilter = THREE.NearestFilter
-  tex.magFilter = THREE.NearestFilter
-  tex.needsUpdate = true
-  return { curve, tex }
+  const points = curve.getSpacedPoints(ROUTE_SAMPLES - 1)
+  return { curve, points }
 }
