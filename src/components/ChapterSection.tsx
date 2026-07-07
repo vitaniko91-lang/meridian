@@ -1,5 +1,5 @@
 import type { Chapter } from '../content/copy'
-import Headline from './Headline'
+import ChapterCopy from './ChapterCopy'
 import Reveal from './Reveal'
 
 /**
@@ -15,18 +15,9 @@ export default function ChapterSection({ c }: { c: Chapter }) {
           c.side === 'left' ? 'md:ml-[8vw]' : 'md:ml-auto md:mr-[8vw]'
         }`}
       >
-        <Reveal>
-          {/* No uppercase transform: copy carries intended caps — "t = 0.120s" must keep its lowercase t/s */}
-          <p className="font-mono text-[11px] tracking-[0.22em] text-muted">{c.kicker}</p>
-          <Headline
-            as="h2"
-            id={`${c.id}-h`}
-            segs={c.headline}
-            className="mt-4 text-[clamp(1.75rem,4vw,2.5rem)] leading-tight"
-          />
-          <p className="mt-5 text-[15px] leading-relaxed text-ivory/85">{c.body}</p>
-          {c.metric && <p className="mt-6 font-mono text-sm text-gold">{c.metric}</p>}
-        </Reveal>
+        {/* Direct call (not <ChapterCopy/>): Reveal must receive the four copy
+            lines as direct children to keep the per-line mask + 60ms stagger. */}
+        <Reveal>{ChapterCopy({ c })}</Reveal>
       </div>
     </section>
   )
