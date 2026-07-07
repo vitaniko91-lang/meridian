@@ -73,7 +73,7 @@ export default function App() {
         <section className="flex min-h-[100lvh] items-center">
           <div className="max-w-[640px] px-6 md:ml-[8vw]">
             <Reveal>
-              <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-muted">{HERO.kicker}</p>
+              <p className="font-mono text-[11px] tracking-[0.22em] text-muted">{HERO.kicker}</p>
               <Headline as="h1" segs={HERO.headline} className="mt-4 text-[clamp(2.5rem,6vw,4rem)] leading-tight" />
               <p className="mt-6 max-w-[480px] leading-relaxed text-ivory/85">{HERO.sub}</p>
               <p className="mt-10 font-mono text-xs text-gold">{HERO.cue} ↓</p>

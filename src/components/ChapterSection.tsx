@@ -16,7 +16,8 @@ export default function ChapterSection({ c }: { c: Chapter }) {
         }`}
       >
         <Reveal>
-          <p className="font-mono text-[11px] tracking-[0.22em] uppercase text-muted">{c.kicker}</p>
+          {/* No uppercase transform: copy carries intended caps — "t = 0.120s" must keep its lowercase t/s */}
+          <p className="font-mono text-[11px] tracking-[0.22em] text-muted">{c.kicker}</p>
           <Headline
             as="h2"
             id={`${c.id}-h`}

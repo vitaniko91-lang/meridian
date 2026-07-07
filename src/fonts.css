@@ -1,7 +1,4 @@
-/* Self-hosted type. Latin subsets only (matches this project's copy).
-   See docs/superpowers/plans/2026-07-07-meridian-plan-2-dom-foundation.md
-   Task 1 report for the Satoshi 600 substitution note (700 shipped instead —
-   Fontshare has no static Semibold for this family). */
+/* Self-hosted type. Latin subsets only (matches this project's copy). */
 
 /* Instrument Serif — display face, regular + italic */
 @font-face {
@@ -20,29 +17,13 @@
   font-display: swap;
 }
 
-/* Satoshi — sans face. Fontshare ships static weights 300/400/500/700/900
-   only (no static 600/Semibold). 700 (Bold) is included as the closest real
-   static above 500 — NOT a synthetic/faux-bold fallback. */
+/* Satoshi — sans face. Single variable file (Fontshare, wght axis 300–900):
+   every weight incl. a true 600 from one 42KB download — smaller than the
+   three statics it replaced (~76KB) and closes the "no static Semibold" gap. */
 @font-face {
   font-family: 'Satoshi';
-  src: url('/fonts/satoshi-400.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Satoshi';
-  src: url('/fonts/satoshi-500.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Satoshi';
-  src: url('/fonts/satoshi-700.woff2') format('woff2');
-  font-weight: 700;
+  src: url('/fonts/satoshi-variable.woff2') format('woff2');
+  font-weight: 300 900;
   font-style: normal;
   font-display: swap;
 }
