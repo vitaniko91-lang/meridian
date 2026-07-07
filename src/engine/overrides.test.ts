@@ -7,8 +7,9 @@ describe('parseOverrides', () => {
       count: undefined,
       dpr: undefined,
       forceWebGL: false,
-      scale: 1,
-      alpha: 1,
+      preferWebGPU: false,
+      scale: undefined,
+      alpha: undefined,
     })
   })
 
@@ -23,12 +24,19 @@ describe('parseOverrides', () => {
     expect(parseOverrides('?count=1000').forceWebGL).toBe(false)
   })
 
-  it('ignores garbage input (NaN / non-positive)', () => {
+  it('treats bare ?webgpu as preferWebGPU, with ?webgl taking precedence', () => {
+    expect(parseOverrides('?webgpu').preferWebGPU).toBe(true)
+    expect(parseOverrides('?webgpu').forceWebGL).toBe(false)
+    expect(parseOverrides('?webgl&webgpu').preferWebGPU).toBe(false)
+    expect(parseOverrides('?webgl&webgpu').forceWebGL).toBe(true)
+  })
+
+  it('ignores garbage input (NaN / non-positive) — engine keeps tuned defaults', () => {
     const o = parseOverrides('?count=abc&dpr=-2&scale=NaN&alpha=0')
     expect(o.count).toBeUndefined()
     expect(o.dpr).toBeUndefined()
-    expect(o.scale).toBe(1)
-    expect(o.alpha).toBe(1)
+    expect(o.scale).toBeUndefined()
+    expect(o.alpha).toBeUndefined()
   })
 
   it('parses scale and alpha multipliers', () => {

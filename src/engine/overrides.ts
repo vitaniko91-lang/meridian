@@ -5,18 +5,21 @@
  *   ?count=300000  → overrides tier.count (positive integer)
  *   ?dpr=1.5       → overrides tier.maxDpr (positive number)
  *   ?webgl         → forces hasWebGPU=false (real WebGL2 fallback path)
- *   ?scale=0.5     → sprite scale multiplier, default 1
- *   ?alpha=0.4     → sprite alpha multiplier, default 1
+ *   ?webgpu        → preferWebGPU=true, opts into the WebGPU tiers
+ *                    (precedence: ?webgl wins over ?webgpu)
+ *   ?scale=0.5     → sets the sprite scale multiplier uniform
+ *   ?alpha=0.4     → sets the sprite alpha multiplier uniform
  *
- * Garbage values (NaN, non-positive) are ignored: count/dpr stay undefined,
- * scale/alpha fall back to 1.
+ * Garbage values (NaN, non-positive) are ignored — the field stays undefined
+ * and the engine keeps its tuned defaults (uScale 0.6 / uAlpha 0.5).
  */
 export type Overrides = {
   count?: number
   dpr?: number
   forceWebGL: boolean
-  scale: number
-  alpha: number
+  preferWebGPU: boolean
+  scale?: number
+  alpha?: number
 }
 
 function positiveNumber(params: URLSearchParams, key: string): number | undefined {
@@ -29,11 +32,13 @@ function positiveNumber(params: URLSearchParams, key: string): number | undefine
 export function parseOverrides(search: string): Overrides {
   const params = new URLSearchParams(search)
   const count = positiveNumber(params, 'count')
+  const forceWebGL = params.has('webgl')
   return {
     count: count === undefined ? undefined : Math.floor(count),
     dpr: positiveNumber(params, 'dpr'),
-    forceWebGL: params.has('webgl'),
-    scale: positiveNumber(params, 'scale') ?? 1,
-    alpha: positiveNumber(params, 'alpha') ?? 1,
+    forceWebGL,
+    preferWebGPU: params.has('webgpu') && !forceWebGL,
+    scale: positiveNumber(params, 'scale'),
+    alpha: positiveNumber(params, 'alpha'),
   }
 }

@@ -34,9 +34,9 @@ export type River = {
   uT: THREE.UniformNode<'float', number>
   /** World-space pointer for repulsion; parked far away until first pointermove. */
   uPointer: THREE.UniformNode<'vec3', THREE.Vector3>
-  /** Sprite scale multiplier, default 1 (art-tuning knob; `?scale=` dev override). */
+  /** Sprite scale multiplier, default 0.6 — bench-validated look (`?scale=` dev override). */
   uScale: THREE.UniformNode<'float', number>
-  /** Sprite alpha multiplier, default 1 (art-tuning knob; `?alpha=` dev override). */
+  /** Sprite alpha multiplier, default 0.5 — bench-validated look (`?alpha=` dev override). */
   uAlpha: THREE.UniformNode<'float', number>
   /**
    * Dispose the GPU material. (Sprite geometry is module-shared in three — never disposed.)
@@ -55,8 +55,10 @@ export function createRiver(count: number): River {
 
   const uT = uniform(0)
   const uPointer = uniform(new THREE.Vector3(0, 0, 999))
-  const uScale = uniform(1)
-  const uAlpha = uniform(1)
+  // Bench 2026-07-07: scale 1 / alpha 0.55 blows out to white under additive
+  // blending at 300k+ — 0.6/0.5 is the validated look. `?scale=` `?alpha=` override.
+  const uScale = uniform(0.6)
+  const uAlpha = uniform(0.5)
 
   // One-time init kernel: seed a loose ribbon along X.
   const init = Fn(() => {
