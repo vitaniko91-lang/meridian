@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { CTA } from '../content/copy'
 import { validateContact, type ContactInput } from '../lib/validate'
 
@@ -9,6 +9,11 @@ const FIELD_ORDER: (keyof ContactInput)[] = ['name', 'email', 'message']
 const INPUT_CLASS =
   'w-full rounded-none border border-ivory/[0.15] bg-transparent px-4 py-3 text-ivory placeholder:text-muted/60 focus:border-gold/60'
 const LABEL_CLASS = 'mb-2 block font-mono text-[11px] uppercase tracking-[0.22em] text-muted'
+// Error text stays ivory (≥4.5:1 AA on vault); steel carries the "cold" signal
+// as a decorative 1px left border only — steel TEXT on vault is ~3.6:1 and the
+// spec palette reserves steel for the Gate particles anyway.
+const ERROR_CLASS = 'border-l border-steel pl-3 text-sm text-ivory/85'
+const FIELD_ERROR_CLASS = `mt-2 ${ERROR_CLASS}`
 
 /**
  * Contact form. Validates on submit, clears per-field errors on edit.
@@ -23,6 +28,13 @@ export default function ContactForm() {
     email: useRef<HTMLInputElement>(null),
     message: useRef<HTMLTextAreaElement>(null),
   }
+  const confirmRef = useRef<HTMLDivElement>(null)
+
+  // After a real 2xx the form unmounts — move focus to the confirmation so
+  // keyboard/AT users aren't left on a node that no longer exists.
+  useEffect(() => {
+    if (status === 'sent') confirmRef.current?.focus()
+  }, [status])
 
   function onChange(field: keyof ContactInput, value: string) {
     setValues((v) => ({ ...v, [field]: value }))
@@ -31,9 +43,17 @@ export default function ContactForm() {
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    const result = validateContact(values)
+    // Single normalize step: the SAME trimmed values feed validation and the
+    // POST body, so client and API always agree (API re-trims — defense in depth).
+    const normalized: ContactInput = {
+      name: values.name.trim(),
+      email: values.email.trim(),
+      message: values.message.trim(),
+    }
+    const result = validateContact(normalized)
     if (!result.ok) {
       setErrors(result.errors)
+      setStatus('idle') // clear any stale failure message — new attempt, new slate
       const firstInvalid = FIELD_ORDER.find((f) => result.errors[f])
       if (firstInvalid) inputRefs[firstInvalid].current?.focus()
       return
@@ -45,7 +65,7 @@ export default function ContactForm() {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify(normalized),
       })
       setStatus(res.ok ? 'sent' : 'failed')
     } catch {
@@ -73,7 +93,7 @@ export default function ContactForm() {
               aria-describedby={errors.name ? 'contact-name-err' : undefined}
             />
             {errors.name && (
-              <p id="contact-name-err" className="mt-2 text-sm text-steel">
+              <p id="contact-name-err" className={FIELD_ERROR_CLASS}>
                 {errors.name}
               </p>
             )}
@@ -95,7 +115,7 @@ export default function ContactForm() {
               aria-describedby={errors.email ? 'contact-email-err' : undefined}
             />
             {errors.email && (
-              <p id="contact-email-err" className="mt-2 text-sm text-steel">
+              <p id="contact-email-err" className={FIELD_ERROR_CLASS}>
                 {errors.email}
               </p>
             )}
@@ -116,7 +136,7 @@ export default function ContactForm() {
               aria-describedby={errors.message ? 'contact-message-err' : undefined}
             />
             {errors.message && (
-              <p id="contact-message-err" className="mt-2 text-sm text-steel">
+              <p id="contact-message-err" className={FIELD_ERROR_CLASS}>
                 {errors.message}
               </p>
             )}
@@ -135,12 +155,12 @@ export default function ContactForm() {
       {/* Persistent aria-live region, mounted from first render — success/failure
           text is swapped into it rather than mounted fresh, so screen readers
           reliably announce the update (a freshly-mounted live region can be missed). */}
-      <div aria-live="polite">
+      <div ref={confirmRef} tabIndex={-1} aria-live="polite">
         {status === 'sent' && (
           <p className="text-[15px] leading-relaxed text-ivory/85">Message sent — we read everything.</p>
         )}
         {status === 'failed' && (
-          <p className="mt-4 text-sm text-steel">Something went wrong on our side — email us instead.</p>
+          <p className={`${ERROR_CLASS} mt-4`}>Something went wrong on our side — email us instead.</p>
         )}
       </div>
     </div>
