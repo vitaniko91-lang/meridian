@@ -86,6 +86,13 @@ export async function createEngine(
   const camOffset = new THREE.Vector3()
   const camPoint = new THREE.Vector3()
   const lookPoint = new THREE.Vector3()
+  // Scratch vectors for the hero birth point (chapter 1): a camera-framed
+  // location so the lone "born" bead is always in-frame, biased into the empty
+  // space to screen-right of the #instant copy (which pins top-left).
+  const camForward = new THREE.Vector3()
+  const camRight = new THREE.Vector3()
+  const heroBirth = new THREE.Vector3()
+  const WORLD_UP = new THREE.Vector3(0, 1, 0)
 
   let lastTime = -1
   renderer.setAnimationLoop((time: number) => {
@@ -108,6 +115,16 @@ export async function createEngine(
     camera.position.copy(camPoint).add(camOffset.fromArray(framing.camOffset))
     route.curve.getPointAt(Math.min(tSmooth + framing.lookAhead, 1), lookPoint)
     camera.lookAt(lookPoint)
+
+    // Hero birth point: lookPoint projects to screen center, so nudge along the
+    // camera-right axis into the empty half beside the #instant copy. Recomputed
+    // every frame from the current camera basis — the hero bead mixes from this
+    // to its route position as the stream reveals (see river.ts hero pin).
+    camForward.subVectors(lookPoint, camera.position).normalize()
+    camRight.crossVectors(camForward, WORLD_UP).normalize()
+    heroBirth.copy(lookPoint).addScaledVector(camRight, 3.6).addScaledVector(camForward, -1.5)
+    river.uHeroBirth.value.copy(heroBirth)
+
     renderer.compute(river.update)
     renderer.render(scene, camera)
   })

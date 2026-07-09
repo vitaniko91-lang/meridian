@@ -44,6 +44,13 @@ export type River = {
   update: THREE.ComputeNode
   /** Narrative time 0..1 — hero particle rides the route at this phase. */
   uT: THREE.UniformNode<'float', number>
+  /**
+   * Camera-framed birth point for the hero bead during chapter 1 (before the
+   * stream reveals). The engine recomputes it each frame from the camera basis
+   * so the lone "born" particle is always in-frame; the hero mixes from this to
+   * its route position as the stream fades in. Parked at origin until set.
+   */
+  uHeroBirth: THREE.UniformNode<'vec3', THREE.Vector3>
   /** World-space pointer for repulsion; parked far away until first pointermove. */
   uPointer: THREE.UniformNode<'vec3', THREE.Vector3>
   /** Sprite scale multiplier, default 0.6 — bench-validated look (`?scale=` dev override). */
@@ -65,6 +72,14 @@ export type River = {
 }
 
 const SEED_HALF_LENGTH = 20 // world units; initial cloud spans x in [-20, 20]
+
+// Peak-1 stream-reveal ramp bounds in narrative-time (uT). The river is dark
+// through "The Instant" (#instant lands at uT≈0.03) and full by the time
+// "The Stream" copy arrives (#stream section top ≈ uT 0.13). The hero bead's
+// birth-lift uses the same bounds so it settles onto the route as the river
+// appears. Tuned visually 2026-07-09 against p3t2-* captures.
+const REVEAL_START = 0.05
+const REVEAL_END = 0.12
 
 /**
  * Per-particle phase along the route — the SAME expression is evaluated in the
@@ -95,6 +110,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   const route = uniformArray<'vec3'>(routePoints, 'vec3')
 
   const uT = uniform(0)
+  const uHeroBirth = uniform(new THREE.Vector3(0, 0, 0))
   const uPointer = uniform(new THREE.Vector3(0, 0, 999))
   // Bench 2026-07-07: scale 1 / alpha 0.55 blows out to white under additive
   // blending at 300k+ — 0.6/0.5 is the validated look. `?scale=` `?alpha=` override.
@@ -190,9 +206,18 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     p.addAssign(v.mul(dtScale))
 
     // Hero particle: instance 0 rides the route exactly at narrative time uT —
-    // pinned after integration so no force can pull it off the rail.
+    // pinned after integration so no force can pull it off the rail. During
+    // chapter 1 ("The Instant") the route start is deliberately sunk (route.ts
+    // cp0) to keep the river clear of copy, so the bead would fall off-frame —
+    // but the lone particle MUST be visible for "one particle of value, released
+    // into the dark". So the hero is BORN at uHeroBirth, a camera-framed point
+    // the engine recomputes each frame (guaranteed in-frame regardless of route
+    // geometry), then settles onto the route as the stream reveals (born ramp,
+    // same bounds as the material reveal below).
     If(instanceIndex.equal(0), () => {
-      p.assign(sampleRoute(float(uT).clamp(0, 1)))
+      const routePos = sampleRoute(float(uT).clamp(0, 1))
+      const born = smoothstep(float(REVEAL_START), float(REVEAL_END), float(uT))
+      p.assign(mix(uHeroBirth, routePos, born))
       v.assign(vec3(0))
     })
   })().compute(count)
@@ -219,15 +244,28 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   // (not particle phase), so the change persists after the window.
   const converted = smoothstep(float(PRISM_AT), float(PRISM_AT + PRISM_HALF), float(uT))
   const heroColor = mix(vec3(1.0, 0.88, 0.62), vec3(0.72, 0.86, 1.0), converted)
+  // Peak 1 — the stream reveal: chapter 1 shows ONLY the hero bead in darkness;
+  // the river fades in as you scroll from "The Instant" into "The Stream" (ch2).
+  // The ramp completes just BEFORE #stream's copy lands (uT≈0.13 at that section
+  // top), so the river is already full and bright when "One payment is never
+  // alone" appears — the darkness→river fill-in reads as the peak moment during
+  // the scroll transition, not as an ashy half-reveal. Ramp driven by uT (same
+  // idiom as the hero conversion above); the hero pin uses the SAME bounds to
+  // settle the bead onto the route as the river materialises around it.
+  const reveal = smoothstep(float(REVEAL_START), float(REVEAL_END), float(uT))
   material.colorNode = select(
     isHero,
     vec4(heroColor, 1),
-    vec4(bodyColor, float(0.55).mul(uAlpha)),
+    vec4(bodyColor, float(0.55).mul(uAlpha).mul(reveal)),
   )
+  // Hero glow while alone: ×9 in the ch1 darkness (the lone "particle of light"
+  // needs presence to carry the opening beat), easing back to its normal ×4 as
+  // the river appears (same reveal ramp). Static presence — no pulse/loop. The
+  // hard square softens to a radial glow in Task 5's sprite art pass.
   material.scaleNode = float(0.02)
     .add(hash(instanceIndex).mul(0.02))
     .mul(uScale)
-    .mul(select(isHero, float(4), float(1)))
+    .mul(select(isHero, mix(float(9), float(4), reveal), float(1)))
 
   const mesh = new THREE.Sprite(material)
   mesh.count = count
@@ -238,6 +276,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     init,
     update,
     uT,
+    uHeroBirth,
     uPointer,
     uScale,
     uAlpha,
