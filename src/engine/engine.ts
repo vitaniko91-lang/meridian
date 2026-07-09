@@ -1,8 +1,8 @@
 import * as THREE from 'three/webgpu'
 import { chooseTier, detectEnv, type Tier } from './tiers'
 import { createFpsMeter } from './fps'
-import { createRiver } from './river'
-import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, CHAPTER_U, LATTICE_ORIGIN, createRoute } from './route'
+import { createRiver, HERO_SNAP_START } from './river'
+import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, LATTICE_ORIGIN, createRoute } from './route'
 import { lerpAnchors } from './timeline'
 import { parseOverrides } from './overrides'
 
@@ -88,7 +88,7 @@ export async function createEngine(
   // Transform-only (offsets camera.position AFTER framing), ~7 frames @60fps.
   // Debounced: armed once per upward crossing, re-arms only when tSmooth falls
   // back below the trigger — so scrubbing back and forth can't spam it.
-  const SHAKE_TRIGGER = CHAPTER_U(6) + 0.055 // == river HERO_SNAP_START
+  const SHAKE_TRIGGER = HERO_SNAP_START // imported from river.ts — one source of truth
   const SHAKE_MS = 120
   const SHAKE_AMP = 0.045 // world units — a ~2px jolt at the paid framing distance
   let prevTSmooth = 0

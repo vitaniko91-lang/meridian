@@ -147,7 +147,9 @@ const LATTICE_OFFSET = new THREE.Vector3(5.5, -3, 3)
 // The hero (instance 0) snaps LAST: it keeps riding the route until the crystal
 // is nearly formed, then lerps hard to its reserved centre-front slot. Window
 // sits just past CRYSTAL_END so the keystone lands after the body has locked.
-const HERO_SNAP_START = CH6_U + 0.055
+// Exported so engine.ts fires the settlement micro-shake at the exact same
+// scroll position the hero begins its snap — one source of truth, no drift.
+export const HERO_SNAP_START = CH6_U + 0.055
 const HERO_SNAP_END = CH6_U + 0.11
 
 /**
@@ -275,25 +277,30 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
     const crystallize = smoothstep(float(CRYSTAL_START), float(CRYSTAL_END), float(uT))
     const staggered = smoothstep(float(0), float(1), crystallize.mul(1.4).sub(hash(instanceIndex.add(97)).mul(0.4)))
 
-    // Phase wrap (route tail → head) yanks the route target ~48 units away;
-    // instead of streaking across the scene such particles respawn at the head.
-    // Discrete respawn, not a rate — no dtScale. Threshold 12 lets nearby seed
-    // particles converge visibly. GATED off once crystallizing (staggered≥0.5):
-    // a locking particle has deliberately left the route, so its route target is
-    // far — the wrap guard must NOT yank it back out of the lattice.
+    // The particle steers toward steerTarget — the route point early, crossfading
+    // to its lattice slot as it crystallizes. Compute it BEFORE the wrap guard so
+    // the guard can key off the ACTUAL target, not the raw route point.
     const routeTarget = target.add(swirl)
-    If(routeTarget.sub(p).length().greaterThan(12).and(staggered.lessThan(0.5)), () => {
-      p.assign(routeTarget)
+    const steerTarget = mix(routeTarget, grid, staggered)
+
+    // Phase wrap (route tail → head) yanks routeTarget ~48 units away every ~50s;
+    // instead of streaking across the scene such particles respawn at the target.
+    // Discrete respawn, not a rate — no dtScale. The guard keys off steerTarget
+    // (not raw routeTarget): while crystallizing (staggered ∈ [0.5,1)) a wrap
+    // still moves steerTarget by (1−staggered)·48 — which can exceed 12 — so
+    // snapping to steerTarget teleports the particle toward its lattice slot
+    // rather than letting it streak across the crystal. Fully locked (staggered=1)
+    // steerTarget = the stationary grid slot, so the guard never fires there.
+    If(steerTarget.sub(p).length().greaterThan(12), () => {
+      p.assign(steerTarget)
       v.assign(vec3(0))
     })
 
-    // Steer toward the (swirled) route point, crossfading to the lattice slot as
-    // the particle crystallizes. This IS the restoring force: the drifting phase
+    // Steer toward steerTarget. This IS the restoring force: the drifting phase
     // supplies forward motion, the spring pulls back in / locks the crystal.
     // dtScale discipline: the damping decay goes through pow(dtScale), the
     // additive steering impulse through .mul(dtScale). The damping STIFFENS
     // 0.94→0.80 as it locks (tighter decay = snappier magnetic convergence).
-    const steerTarget = mix(routeTarget, grid, staggered)
     const desired = steerTarget.sub(p).mul(0.04)
     const dampBase = mix(float(0.94), float(0.80), staggered)
     v.assign(v.mul(dampBase.pow(dtScale)).add(desired.mul(dtScale)))
