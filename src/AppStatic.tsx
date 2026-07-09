@@ -1,6 +1,7 @@
 import ChapterCopy from './components/ChapterCopy'
 import ContactForm from './components/ContactForm'
 import Headline from './components/Headline'
+import Ornament from './components/Ornament'
 import SiteFooter from './components/SiteFooter'
 import SiteHeader from './components/SiteHeader'
 import StaticPoster from './components/StaticPoster'
@@ -24,6 +25,7 @@ export default function AppStatic() {
         Skip to content
       </a>
       <SiteHeader solid />
+      <Ornament />
       <main id="main" className="relative">
         <section className="relative flex min-h-[90vh] items-center">
           <StaticPoster />

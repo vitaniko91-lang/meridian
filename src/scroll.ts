@@ -21,7 +21,12 @@ export function initScroll(onT: (t: number) => void, timerEl: HTMLElement) {
   }
   active = true
 
-  const lenis = new Lenis() // defaults ≈ native feel, no hijack
+  // lerp 0.16 (vs the 0.1 default) tightens Lenis's own smoothing so a wheel
+  // flick settles in ~0.7-0.85s instead of ~1.3s+ — the Task-6 review found the
+  // stacked smoothers (Lenis lerp × the engine's tSmooth) compounded into a
+  // slidey ~1.3s glide. wheelMultiplier 0.9 trims a touch of over-throw;
+  // syncTouch gives touch the same eased feel as the wheel (no raw native jump).
+  const lenis = new Lenis({ lerp: 0.16, wheelMultiplier: 0.9, syncTouch: true })
   lenis.on('scroll', ScrollTrigger.update)
   const raf = (time: number) => lenis.raf(time * 1000) // gsap ticker: s → ms
   gsap.ticker.add(raf)

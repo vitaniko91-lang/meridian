@@ -108,12 +108,14 @@ export async function createEngine(
   let lastTime = -1
   renderer.setAnimationLoop((time: number) => {
     fps.tick()
-    // Frame-rate independent exponential smoothing: equals the old 0.06/frame
-    // at 60fps, but converges identically at 30 or 120fps. dt clamped at 50ms
-    // so tab-switch pauses don't teleport the camera.
+    // Frame-rate independent exponential smoothing: K=0.09 per 60fps-frame,
+    // converging identically at 30 or 120fps. dt clamped at 50ms so tab-switch
+    // pauses don't teleport the camera. K raised 0.06→0.09 in the Task-5 scroll
+    // pass so this (already-eased-by-Lenis) layer stays dominant with less
+    // compounding — one snappy smoother reads better than two stacked slow ones.
     const dt = lastTime < 0 ? 1 / 60 : Math.min((time - lastTime) / 1000, 0.05)
     lastTime = time
-    tSmooth += (tTarget - tSmooth) * (1 - Math.pow(1 - 0.06, dt * 60))
+    tSmooth += (tTarget - tSmooth) * (1 - Math.pow(1 - 0.09, dt * 60))
     river.uT.value = tSmooth // hero particle rides with the camera
     // Micro-shake trigger: fire on the upward crossing of the snap threshold
     // (debounced via shakeArmed); re-arm once tSmooth drops back below it.

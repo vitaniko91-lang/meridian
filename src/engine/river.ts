@@ -10,12 +10,14 @@ import {
   instancedArray,
   instanceIndex,
   mix,
+  oneMinus,
   select,
   sin,
   smoothstep,
   time,
   uniform,
   uniformArray,
+  uv,
   vec3,
   vec4,
 } from 'three/tsl'
@@ -59,6 +61,14 @@ export type River = {
   /** Sprite alpha multiplier, default 0.5 — bench-validated look (`?alpha=` dev override). */
   uAlpha: THREE.UniformNode<'float', number>
   /**
+   * Settlement crystal centre (world space) — LATTICE_ORIGIN + LATTICE_OFFSET.
+   * Exposed for composition tuning: the kernel's lattice grid and the hero snap
+   * slot both derive from it, so nudging `.value` live re-homes the whole crystal
+   * (locked particles migrate via the steering spring). Baked offset lives in
+   * LATTICE_OFFSET; this handle is the live-tuning surface.
+   */
+  uLatticeOrigin: THREE.UniformNode<'vec3', THREE.Vector3>
+  /**
    * Position storage node — debug/verification handle. Read positions back with
    * `renderer.getArrayBufferAsync(river.positions.value)` (r185 common Renderer API).
    */
@@ -79,6 +89,10 @@ const SEED_HALF_LENGTH = 20 // world units; initial cloud spans x in [-20, 20]
 // "The Stream" copy arrives (#stream section top ≈ uT 0.13). The hero bead's
 // birth-lift uses the same bounds so it settles onto the route as the river
 // appears. Tuned visually 2026-07-09 against p3t2-* captures.
+// Derivation: those uT targets come from the page's scroll geometry — hero
+// 100lvh + 7×130lvh chapters + contact 90lvh, mapped scroll→uT through
+// scrollToNarrative's smootherstep. If a section height changes, the #instant/
+// #stream scroll fractions move, so re-derive these two bounds against them.
 const REVEAL_START = 0.05
 const REVEAL_END = 0.12
 
@@ -112,9 +126,24 @@ const CH6_U = CHAPTER_U(6) // 6/7 ≈ 0.857 — start of the Settlement chapter.
 // Tuned visually against the p3t4-* captures (uT: settlement≈0.82, paid≈0.95).
 const CRYSTAL_START = CH6_U - 0.1
 const CRYSTAL_END = CH6_U + 0.05
-// World-unit pitch between adjacent lattice slots. side·PITCH ≈ 9.4u full extent
-// for a 300k cube (side 67) — a tight, dense crystal centred on LATTICE_ORIGIN.
-const LATTICE_PITCH = 0.14
+// Full world-space extent of the settlement crystal cube — HELD CONSTANT across
+// tiers so the composition is count-independent (the per-slot pitch is derived
+// as LATTICE_EXTENT / side inside createRiver, side = ⌈∛count⌉). Without this the
+// cube would grow with the particle count (6u @300k but 9u @1M at a fixed pitch)
+// and re-encroach on the PAID copy on the WebGPU tier. 6u is the Task-5 art-pass
+// value: at the old ~9.4u the cube spanned the whole left half at #paid and
+// buried the (left-hugging) copy; a compact 6u cube keeps its screen footprint
+// centred on its projection point, in the frame's open centre-right, clear of
+// the top-left copy and fully on-screen at every width (incl. the tall wrapped
+// 375 metric). Paired with the soft sprite glow so the dense lattice still reads
+// as one ordered glowing object; higher tiers just pack the same cube denser.
+const LATTICE_EXTENT = 6
+// World-space nudge of the crystal centre off the raw route point, to seat the
+// cube in the frame's open centre-right/lower at #paid — clear of the
+// left-hugging PAID copy — without touching any camera anchor (which would also
+// move the #contact tail framing). +x/−y/+z ≈ screen right+down at the paid
+// framing. Tuned live against the p3t5 paid/settlement matrix (1440/768/375).
+const LATTICE_OFFSET = new THREE.Vector3(5.5, -3, 3)
 // The hero (instance 0) snaps LAST: it keeps riding the route until the crystal
 // is nearly formed, then lerps hard to its reserved centre-front slot. Window
 // sits just past CRYSTAL_END so the keystone lands after the body has locked.
@@ -169,8 +198,13 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
   // basin, passed from route.ts LATTICE_ORIGIN, cloned so we don't alias the
   // exported constant). Both feed the crystallization kernel below AND the hero
   // snap; set once at construction.
-  const uLatticeSide = uniform(Math.ceil(Math.cbrt(count)))
-  const uLatticeOrigin = uniform(latticeOrigin.clone())
+  // Cube side = ⌈∛count⌉ (67 @300k, 100 @1M); pitch derived so the cube's world
+  // extent is LATTICE_EXTENT regardless of count (see the const's note) — the
+  // crystal composition stays fixed across tiers; higher counts just pack denser.
+  const latticeSide = Math.ceil(Math.cbrt(count))
+  const latticePitch = LATTICE_EXTENT / latticeSide
+  const uLatticeSide = uniform(latticeSide)
+  const uLatticeOrigin = uniform(latticeOrigin.clone().add(LATTICE_OFFSET))
 
   // Linearly interpolated route lookup at u ∈ [0,1] (in-kernel, no sampler).
   // Indices are clamped in float space before the int cast — @types/three r185
@@ -232,7 +266,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
     const layer = idxF.div(side).floor() // floor(idx / side)
     const cellY = layer.sub(side.mul(layer.div(side).floor())) // layer mod side
     const cellZ = idxF.div(side.mul(side)).floor() // floor(idx / side²)
-    const grid = vec3(cellX, cellY, cellZ).sub(side.mul(0.5)).mul(LATTICE_PITCH).add(uLatticeOrigin)
+    const grid = vec3(cellX, cellY, cellZ).sub(side.mul(0.5)).mul(latticePitch).add(uLatticeOrigin)
 
     // Crystallize blend (narrative-time). STAGGER per particle so slots lock in
     // hash order, not all at once — "staggered magnetic locking". `staggered`
@@ -313,7 +347,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
       // "front"), making the hero the ledger's visible keystone. This composes
       // cleanly with the ch1 born mix above: `born` ramps at uT≈0, `snap` at
       // uT≈0.91 — opposite ends of uT, so at most one is ever in transit.
-      const heroLattice = uLatticeOrigin.add(vec3(float(0), float(0), side.mul(LATTICE_PITCH).mul(0.5)))
+      const heroLattice = uLatticeOrigin.add(vec3(float(0), float(0), side.mul(latticePitch).mul(0.5)))
       const snap = smoothstep(float(HERO_SNAP_START), float(HERO_SNAP_END), float(uT))
       p.assign(mix(ride, heroLattice, snap))
       v.assign(vec3(0))
@@ -332,15 +366,26 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
   // recomputed here with the SAME expression as the update kernel — see the
   // particleProgress note on why compute and render agree within a frame.
   const bodyProgress = particleProgress()
+  // Prism dispersion window (render side) — same triangle as the kernel fan.
+  // Reused for the spectral mix AND the core-dim in the alpha below.
+  const inWindowBody = prismWindow(bodyProgress)
+  // Saturated spectrum (Task-5 verdict §2): at 300k the fan blew to a white core
+  // because thousands of overlapping additive hues summed past clip. Two knobs
+  // fix it — (1) spectral(hue).pow(0.8) lifts each channel toward its pure hue so
+  // the band reads vivid violet→red, and (2) inWindowBody.pow(0.7) brings colour
+  // in earlier/stronger across the window. The dense-core dim lives in the alpha.
   const bodyColor = mix(
     vec3(0.91, 0.76, 0.46), // #E8C275 as light
-    spectral(particleHue()),
-    prismWindow(bodyProgress),
+    spectral(particleHue()).pow(vec3(0.8)),
+    inWindowBody.pow(0.7),
   )
-  // Gate mark: a suspect's color shifts permanently to steel once its phase
-  // passes the gate. Progress-based smoothstep (like the prism tint) so it
-  // SURVIVES past the window — unlike the triangle deflection, it stays steel.
-  // Non-suspects: suspectFactor 0 → mix returns bodyColor unchanged.
+  // Gate mark: a suspect's color shifts to steel once its phase passes the gate.
+  // Progress-based smoothstep (like the prism tint) so it SURVIVES past the
+  // window — unlike the triangle deflection, it stays steel. NB this is permanent
+  // per phase-lap, NOT narrative-permanent like the hero conversion below:
+  // particleProgress fract-wraps every ~50s (time·0.02), so a suspect re-greys
+  // from gold each lap as its phase re-crosses the gate. Non-suspects:
+  // suspectFactor 0 → mix returns bodyColor unchanged.
   const steeled = smoothstep(float(GATE_AT), float(GATE_AT + GATE_HALF), bodyProgress)
   const screenedColor = mix(bodyColor, vec3(STEEL[0], STEEL[1], STEEL[2]), steeled.mul(suspectFactor()))
   // Ch7 pull-back vista shimmer: once crystallized, each locked cell breathes at
@@ -367,10 +412,24 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
   // idiom as the hero conversion above); the hero pin uses the SAME bounds to
   // settle the bead onto the route as the river materialises around it.
   const reveal = smoothstep(float(REVEAL_START), float(REVEAL_END), float(uT))
+  // Radial sprite glow — soften every additive square into a point of light.
+  // The Sprite billboard's uv() runs 0..1 across the quad (centre 0.5,0.5), so
+  // `d` is the radial distance from centre; smoothstep(0.5,0.0,d) is 1 at the
+  // centre → 0 at the edge midpoint (d=0.5), already 0 at the corners. Folding
+  // it into the additive alpha turns each hard chip into a soft round bead. This
+  // does double duty: it breaks up the settlement crystal's square-on-square
+  // moiré, and it makes the lone hero bead read as a glow rather than a pixel.
+  const spriteGlow = smoothstep(0.5, 0.0, uv().sub(0.5).length())
+  // Dense-core dim inside the prism window: each in-window particle sheds up to
+  // 45% of its additive alpha at the window peak, so the thousands of overlapping
+  // sprites at the fan's heart stop summing to a blown white lens and the
+  // per-particle hues show through instead (Task-5 verdict §2, the other half of
+  // the saturation fix). oneMinus(inWindowBody·0.45): 1 outside → 0.55 at peak.
+  const prismDim = oneMinus(inWindowBody.mul(0.45))
   material.colorNode = select(
     isHero,
-    vec4(heroColor, 1),
-    vec4(litColor, float(0.55).mul(uAlpha).mul(reveal)),
+    vec4(heroColor, spriteGlow),
+    vec4(litColor, float(0.55).mul(uAlpha).mul(reveal).mul(spriteGlow).mul(prismDim)),
   )
   // Hero glow while alone: ×9 in the ch1 darkness (the lone "particle of light"
   // needs presence to carry the opening beat), easing back to its normal ×4 as
@@ -394,6 +453,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
     uPointer,
     uScale,
     uAlpha,
+    uLatticeOrigin,
     positions,
     dispose() {
       material.dispose()

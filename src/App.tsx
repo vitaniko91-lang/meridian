@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ChapterSection from './components/ChapterSection'
 import ContactForm from './components/ContactForm'
 import Headline from './components/Headline'
+import Ornament from './components/Ornament'
 import Reveal from './components/Reveal'
 import SiteFooter from './components/SiteFooter'
 import SiteHeader from './components/SiteHeader'
@@ -64,6 +65,7 @@ export default function App() {
       </a>
       <SiteHeader />
       <canvas ref={canvasRef} className="fixed inset-0 -z-10 h-[100lvh] w-full" />
+      <Ornament />
       <div ref={hudRef} className="fixed right-3 top-3 font-mono text-xs text-gold" />
       <div className="fixed left-3 top-3 font-mono text-xs text-muted">{backend}</div>
       <div ref={timerRef} aria-hidden="true" className="fixed bottom-3 left-3 font-mono text-sm text-gold">
