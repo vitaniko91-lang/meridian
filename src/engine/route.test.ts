@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, CHAPTER_U, createRoute, ROUTE_SAMPLES } from './route'
+import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, CHAPTER_U, LATTICE_ORIGIN, createRoute, ROUTE_SAMPLES } from './route'
 import { PRISM_AT } from './prism'
 
 describe('CHAPTER_U', () => {
@@ -54,6 +54,22 @@ describe('CHAPTER_ANCHORS_PORTRAIT', () => {
       for (const v of a.camOffset) expect(Number.isFinite(v)).toBe(true)
     })
     expect(CHAPTER_ANCHORS_PORTRAIT[0].camOffset).not.toEqual(CHAPTER_ANCHORS[0].camOffset)
+  })
+})
+
+describe('LATTICE_ORIGIN', () => {
+  it('equals the curve point at chapter 6 (the settlement crystal centre)', () => {
+    const { curve } = createRoute()
+    const p = curve.getPointAt(CHAPTER_U(6))
+    expect(LATTICE_ORIGIN.distanceTo(p)).toBeLessThan(1e-9)
+  })
+
+  it('is finite and sits in the right (settlement/paid) half of the route', () => {
+    for (const v of [LATTICE_ORIGIN.x, LATTICE_ORIGIN.y, LATTICE_ORIGIN.z]) {
+      expect(Number.isFinite(v)).toBe(true)
+    }
+    // route sweeps left→right; chapter 6 is past centre, so x is well positive
+    expect(LATTICE_ORIGIN.x).toBeGreaterThan(0)
   })
 })
 

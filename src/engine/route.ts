@@ -109,8 +109,21 @@ const CONTROL_POINTS = [
   new THREE.Vector3(27, -4.2, -4.1), // finish dives down-away roughly along the paid-anchor view ray so the end cluster foreshortens toward a pip at screen center (route end ≡ look target at t=1; the steeper tuned paid pitch leaves a short whisker). Tasks 2-4 kernel windows fade the river out past PAID, which removes the residual pip/whisker over the contact form.
 ]
 
+// Single shared curve instance: the CPU camera rail (curve.getPointAt) and the
+// GPU route points (getSpacedPoints) both derive from it, and LATTICE_ORIGIN
+// below reads it at chapter 6 — one source of truth, no drift by construction.
+const curve = new THREE.CatmullRomCurve3(CONTROL_POINTS)
+
+/**
+ * Centre of the Settlement crystal lattice (Plan-3 Task 4). The route point at
+ * the start of chapter 6 (Settlement) — arc-length parametrised, so it matches
+ * the camera rail's own `getPointAt` sampling. Exported so the engine can seed
+ * the river's `uLatticeOrigin` uniform once and tests can assert it tracks the
+ * curve. Read at module load (triggers the curve's arc-length LUT once).
+ */
+export const LATTICE_ORIGIN: THREE.Vector3 = curve.getPointAt(CHAPTER_U(6))
+
 export function createRoute(): Route {
-  const curve = new THREE.CatmullRomCurve3(CONTROL_POINTS)
   const points = curve.getSpacedPoints(ROUTE_SAMPLES - 1)
   return { curve, points }
 }

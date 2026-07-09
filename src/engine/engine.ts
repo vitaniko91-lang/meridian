@@ -2,7 +2,7 @@ import * as THREE from 'three/webgpu'
 import { chooseTier, detectEnv, type Tier } from './tiers'
 import { createFpsMeter } from './fps'
 import { createRiver } from './river'
-import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, createRoute } from './route'
+import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, CHAPTER_U, LATTICE_ORIGIN, createRoute } from './route'
 import { lerpAnchors } from './timeline'
 import { parseOverrides } from './overrides'
 
@@ -45,7 +45,7 @@ export async function createEngine(
   camera.position.set(0, 0, 12)
 
   const route = createRoute()
-  const river = createRiver(tier.count, route.points)
+  const river = createRiver(tier.count, route.points, LATTICE_ORIGIN)
   if (overrides.scale !== undefined) river.uScale.value = overrides.scale
   if (overrides.alpha !== undefined) river.uAlpha.value = overrides.alpha
   scene.add(river.mesh)
@@ -83,6 +83,17 @@ export async function createEngine(
   // Scroll (src/scroll.ts) drives tTarget via setT; the loop smooths toward it.
   let tTarget = 0
   let tSmooth = 0
+  // Settlement snap micro-shake: a one-shot damped-sine camera nudge fired the
+  // instant tSmooth crosses into the hero-snap window (the ledger "locks in").
+  // Transform-only (offsets camera.position AFTER framing), ~7 frames @60fps.
+  // Debounced: armed once per upward crossing, re-arms only when tSmooth falls
+  // back below the trigger — so scrubbing back and forth can't spam it.
+  const SHAKE_TRIGGER = CHAPTER_U(6) + 0.055 // == river HERO_SNAP_START
+  const SHAKE_MS = 120
+  const SHAKE_AMP = 0.045 // world units — a ~2px jolt at the paid framing distance
+  let prevTSmooth = 0
+  let shakeArmed = true
+  let shakeStart = -1
   const camOffset = new THREE.Vector3()
   const camPoint = new THREE.Vector3()
   const lookPoint = new THREE.Vector3()
@@ -104,6 +115,14 @@ export async function createEngine(
     lastTime = time
     tSmooth += (tTarget - tSmooth) * (1 - Math.pow(1 - 0.06, dt * 60))
     river.uT.value = tSmooth // hero particle rides with the camera
+    // Micro-shake trigger: fire on the upward crossing of the snap threshold
+    // (debounced via shakeArmed); re-arm once tSmooth drops back below it.
+    if (shakeArmed && prevTSmooth < SHAKE_TRIGGER && tSmooth >= SHAKE_TRIGGER) {
+      shakeStart = time
+      shakeArmed = false
+    }
+    if (tSmooth < SHAKE_TRIGGER) shakeArmed = true
+    prevTSmooth = tSmooth
     // Per-chapter framing: piecewise-lerped camera offset + look-ahead
     // (route.ts CHAPTER_ANCHORS carry the composition intent per chapter;
     // portrait viewports swap the hero keyframe — see route.ts).
@@ -124,6 +143,20 @@ export async function createEngine(
     camRight.crossVectors(camForward, WORLD_UP).normalize()
     heroBirth.copy(lookPoint).addScaledVector(camRight, 3.6).addScaledVector(camForward, -1.5)
     river.uHeroBirth.value.copy(heroBirth)
+
+    // Apply the settlement micro-shake LAST — a damped sine on camera.position
+    // only (no re-aim: lookAt already ran, so this is a pure translational
+    // jolt). Runs the frame after heroBirth so the shake never perturbs it.
+    if (shakeStart >= 0) {
+      const e = time - shakeStart
+      if (e <= SHAKE_MS) {
+        const s = SHAKE_AMP * (1 - e / SHAKE_MS) * Math.sin((e / SHAKE_MS) * Math.PI * 3)
+        camera.position.x += s
+        camera.position.y += s * 0.6
+      } else {
+        shakeStart = -1
+      }
+    }
 
     renderer.compute(river.update)
     renderer.render(scene, camera)

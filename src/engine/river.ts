@@ -19,7 +19,7 @@ import {
   vec3,
   vec4,
 } from 'three/tsl'
-import { ROUTE_SAMPLES } from './route'
+import { CHAPTER_U, ROUTE_SAMPLES } from './route'
 import { PRISM_AT, PRISM_HALF, prismFan, prismWindow, spectral } from './prism'
 import { routeWindow } from './windows'
 
@@ -95,6 +95,32 @@ const SUSPECT_THRESHOLD = 0.0004
 // Steel #5A6B7A — the screened-out currency's cool, inert tone.
 const STEEL = [0.353, 0.42, 0.478] as const
 
+// Settlement (chapter 6) — the climax: the stream crystallizes into a cubic
+// lattice (the settled ledger). Each particle derives its lattice slot from
+// instanceIndex and steers off the route into it. Narrative-time (uT) driven,
+// so the lock is permanent once reached — and releases if the user scrolls back
+// up into the river (an acceptable, delightful reversibility).
+const CH6_U = CHAPTER_U(6) // 6/7 ≈ 0.857 — start of the Settlement chapter.
+// Crystallize ramp bounds in narrative-time. The leading edge (−0.10) is early
+// and wide DELIBERATELY: the per-particle STAGGER below delays visible locking,
+// and the settlement section-top lands at uT≈0.82 — so a wide ramp makes the
+// lock already visibly forming as the SETTLEMENT copy pins ("part river, part
+// lattice"), completing by mid-runway. The crystallizing particles sit in the
+// settlement basin (x≈17..26), off-screen-right during the PRISM chapter, so
+// the early start never bleeds crystal into the dispersion beat. Trailing edge
+// (+0.05) so the body is fully locked before PAID and before the hero snap.
+// Tuned visually against the p3t4-* captures (uT: settlement≈0.82, paid≈0.95).
+const CRYSTAL_START = CH6_U - 0.1
+const CRYSTAL_END = CH6_U + 0.05
+// World-unit pitch between adjacent lattice slots. side·PITCH ≈ 9.4u full extent
+// for a 300k cube (side 67) — a tight, dense crystal centred on LATTICE_ORIGIN.
+const LATTICE_PITCH = 0.14
+// The hero (instance 0) snaps LAST: it keeps riding the route until the crystal
+// is nearly formed, then lerps hard to its reserved centre-front slot. Window
+// sits just past CRYSTAL_END so the keystone lands after the body has locked.
+const HERO_SNAP_START = CH6_U + 0.055
+const HERO_SNAP_END = CH6_U + 0.11
+
 /**
  * Per-particle phase along the route — the SAME expression is evaluated in the
  * update kernel (compute pass) and the material colorNode (render pass), and
@@ -122,7 +148,7 @@ const particleHue = () => hash(instanceIndex.add(777))
  */
 const suspectFactor = () => select(hash(instanceIndex.add(31)).lessThan(SUSPECT_THRESHOLD), float(1), float(0))
 
-export function createRiver(count: number, routePoints: THREE.Vector3[]): River {
+export function createRiver(count: number, routePoints: THREE.Vector3[], latticeOrigin: THREE.Vector3): River {
   const positions = instancedArray(count, 'vec3')
   const velocities = instancedArray(count, 'vec3')
 
@@ -138,6 +164,13 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   // blending at 300k+ — 0.6/0.5 is the validated look. `?scale=` `?alpha=` override.
   const uScale = uniform(0.6)
   const uAlpha = uniform(0.5)
+  // Settlement lattice: cube side (⌈∛count⌉ = 67 for 300k; a hardcoded 64 would
+  // overflow — 64³ = 262144 < 300000) and its world-space centre (the ch6 route
+  // basin, passed from route.ts LATTICE_ORIGIN, cloned so we don't alias the
+  // exported constant). Both feed the crystallization kernel below AND the hero
+  // snap; set once at construction.
+  const uLatticeSide = uniform(Math.ceil(Math.cbrt(count)))
+  const uLatticeOrigin = uniform(latticeOrigin.clone())
 
   // Linearly interpolated route lookup at u ∈ [0,1] (in-kernel, no sampler).
   // Indices are clamped in float space before the int cast — @types/three r185
@@ -187,28 +220,53 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
       cos(progress.mul(38).add(time.mul(0.8))).mul(swirlAmp),
     )
 
-    // Phase wrap (route tail → head) yanks the target ~48 units away; instead
-    // of streaking across the scene (and past the camera rail as a giant
-    // near-camera sprite), such particles respawn at their new target.
+    // Settlement crystallization target: each particle owns a cubic lattice
+    // slot derived from its instanceIndex — decompose the flat index into
+    // (cellX, cellY, cellZ) in float space (int mod isn't cleanly typed in r185;
+    // the float idiom a − b·floor(a/b) is exact for non-negative a and gives a
+    // TRUE 3D cube: x is fastest, then y, then z, all spanning 0..side−1). The
+    // ×0.5 recenters the cube on LATTICE_ORIGIN.
+    const idxF = float(instanceIndex)
+    const side = uLatticeSide
+    const cellX = idxF.sub(side.mul(idxF.div(side).floor())) // idx mod side
+    const layer = idxF.div(side).floor() // floor(idx / side)
+    const cellY = layer.sub(side.mul(layer.div(side).floor())) // layer mod side
+    const cellZ = idxF.div(side.mul(side)).floor() // floor(idx / side²)
+    const grid = vec3(cellX, cellY, cellZ).sub(side.mul(0.5)).mul(LATTICE_PITCH).add(uLatticeOrigin)
+
+    // Crystallize blend (narrative-time). STAGGER per particle so slots lock in
+    // hash order, not all at once — "staggered magnetic locking". `staggered`
+    // drives BOTH the steering target crossfade AND the damping stiffen, and
+    // clamps to [0,1] (smoothstep clamps): 0 = pure river, 1 = pure lattice.
+    const crystallize = smoothstep(float(CRYSTAL_START), float(CRYSTAL_END), float(uT))
+    const staggered = smoothstep(float(0), float(1), crystallize.mul(1.4).sub(hash(instanceIndex.add(97)).mul(0.4)))
+
+    // Phase wrap (route tail → head) yanks the route target ~48 units away;
+    // instead of streaking across the scene such particles respawn at the head.
     // Discrete respawn, not a rate — no dtScale. Threshold 12 lets nearby seed
-    // particles converge visibly; farther ones respawn on frame 1.
-    const toTarget = target.add(swirl).sub(p).toVar()
-    If(toTarget.length().greaterThan(12), () => {
-      p.assign(target.add(swirl))
+    // particles converge visibly. GATED off once crystallizing (staggered≥0.5):
+    // a locking particle has deliberately left the route, so its route target is
+    // far — the wrap guard must NOT yank it back out of the lattice.
+    const routeTarget = target.add(swirl)
+    If(routeTarget.sub(p).length().greaterThan(12).and(staggered.lessThan(0.5)), () => {
+      p.assign(routeTarget)
       v.assign(vec3(0))
-      toTarget.assign(vec3(0))
     })
 
-    // Steer toward the (swirled) route point. This IS the restoring force now —
-    // it replaces the old y/z spring toward the ribbon core AND the constant +X
-    // drift: the drifting phase supplies forward motion, the spring pulls back in.
-    // dtScale discipline: the 0.94 steering damping replaces the old 0.985
-    // (steering gain 0.04 is far stronger than the old accumulative terms and
-    // needs heavier damping to converge instead of orbiting the target); as a
-    // per-reference-frame decay it goes through pow(dtScale), and the additive
-    // steering impulse through .mul(dtScale), same as every other term.
-    const desired = toTarget.mul(0.04)
-    v.assign(v.mul(float(0.94).pow(dtScale)).add(desired.mul(dtScale)))
+    // Steer toward the (swirled) route point, crossfading to the lattice slot as
+    // the particle crystallizes. This IS the restoring force: the drifting phase
+    // supplies forward motion, the spring pulls back in / locks the crystal.
+    // dtScale discipline: the damping decay goes through pow(dtScale), the
+    // additive steering impulse through .mul(dtScale). The damping STIFFENS
+    // 0.94→0.80 as it locks (tighter decay = snappier magnetic convergence).
+    const steerTarget = mix(routeTarget, grid, staggered)
+    const desired = steerTarget.sub(p).mul(0.04)
+    const dampBase = mix(float(0.94), float(0.80), staggered)
+    v.assign(v.mul(dampBase.pow(dtScale)).add(desired.mul(dtScale)))
+
+    // Fade the per-phase route impulses (prism fan, gate deflection) out as a
+    // particle locks, so residual side-forces don't fuzz the crystal lattice.
+    const notLocked = float(1).sub(staggered)
 
     // Prism dispersion: inside the window the stream fans into a spectrum band —
     // a per-wavelength lateral impulse spreads particles by hue; the steering
@@ -216,7 +274,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     // Applied AFTER the wrap guard (which zeroes v) so a wrap-snap can't fight
     // the fan; max offset ~±0.9 units stays far under the 12-unit snap radius.
     const inWindow = prismWindow(progress)
-    v.addAssign(prismFan(particleHue(), inWindow).mul(0.05).mul(dtScale))
+    v.addAssign(prismFan(particleHue(), inWindow).mul(0.05).mul(dtScale).mul(notLocked))
 
     // Gate screening: inside the gate window the rare suspects get a lateral +
     // downward impulse — pushed DOWN and aside, out of the gold stream. The
@@ -226,7 +284,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     // × suspectFactor (0/1) so only suspects move. AFTER the wrap guard, same
     // as the prism fan, so a wrap-snap can't fight it.
     const inGateWindow = routeWindow(progress, GATE_AT, GATE_HALF)
-    v.addAssign(vec3(0, -0.9, 0.35).mul(inGateWindow).mul(0.08).mul(dtScale).mul(suspectFactor()))
+    v.addAssign(vec3(0, -0.9, 0.35).mul(inGateWindow).mul(0.08).mul(dtScale).mul(suspectFactor()).mul(notLocked))
 
     // Pointer repulsion (tactility proof).
     const toPointer = p.sub(uPointer)
@@ -249,7 +307,15 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     If(instanceIndex.equal(0), () => {
       const routePos = sampleRoute(float(uT).clamp(0, 1))
       const born = smoothstep(float(REVEAL_START), float(REVEAL_END), float(uT))
-      p.assign(mix(uHeroBirth, routePos, born))
+      const ride = mix(uHeroBirth, routePos, born)
+      // Hero snaps LAST into a RESERVED centre-front slot — the near (+z) face
+      // centre of the crystal (the paid camera sits at large +z, so +z reads as
+      // "front"), making the hero the ledger's visible keystone. This composes
+      // cleanly with the ch1 born mix above: `born` ramps at uT≈0, `snap` at
+      // uT≈0.91 — opposite ends of uT, so at most one is ever in transit.
+      const heroLattice = uLatticeOrigin.add(vec3(float(0), float(0), side.mul(LATTICE_PITCH).mul(0.5)))
+      const snap = smoothstep(float(HERO_SNAP_START), float(HERO_SNAP_END), float(uT))
+      p.assign(mix(ride, heroLattice, snap))
       v.assign(vec3(0))
     })
   })().compute(count)
@@ -277,6 +343,16 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   // Non-suspects: suspectFactor 0 → mix returns bodyColor unchanged.
   const steeled = smoothstep(float(GATE_AT), float(GATE_AT + GATE_HALF), bodyProgress)
   const screenedColor = mix(bodyColor, vec3(STEEL[0], STEEL[1], STEEL[2]), steeled.mul(suspectFactor()))
+  // Ch7 pull-back vista shimmer: once crystallized, each locked cell breathes at
+  // a sub-1Hz rate (0.7 rad/s ≈ 0.11 Hz) with a per-particle phase (hash(idx))
+  // so the crystal glimmers asynchronously — the settled ledger, alive but calm.
+  // This is the ONE permitted idle motion, and it is NOT a status pulse: it's a
+  // faint ±10% brightness ripple applied only to the crystallized fraction
+  // (crystallizeMat = the same uT ramp as the kernel, so all cells cross into
+  // shimmer together). Gold/steel bodies keep full brightness while a river.
+  const crystallizeMat = smoothstep(float(CRYSTAL_START), float(CRYSTAL_END), float(uT))
+  const shimmer = float(0.9).add(sin(time.mul(0.7).add(hash(instanceIndex).mul(6.2832))).mul(0.1))
+  const litColor = screenedColor.mul(mix(float(1), shimmer, crystallizeMat))
   // Hero conversion: once narrative time uT passes the prism, the hero's warm
   // gold permanently shifts to the "new currency" cool light — driven by uT
   // (not particle phase), so the change persists after the window.
@@ -294,7 +370,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   material.colorNode = select(
     isHero,
     vec4(heroColor, 1),
-    vec4(screenedColor, float(0.55).mul(uAlpha).mul(reveal)),
+    vec4(litColor, float(0.55).mul(uAlpha).mul(reveal)),
   )
   // Hero glow while alone: ×9 in the ch1 darkness (the lone "particle of light"
   // needs presence to carry the opening beat), easing back to its normal ×4 as
