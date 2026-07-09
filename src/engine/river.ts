@@ -21,6 +21,7 @@ import {
 } from 'three/tsl'
 import { ROUTE_SAMPLES } from './route'
 import { PRISM_AT, PRISM_HALF, prismFan, prismWindow, spectral } from './prism'
+import { routeWindow } from './windows'
 
 /**
  * GPU particle river advected along the narrative route spline: each particle
@@ -81,6 +82,19 @@ const SEED_HALF_LENGTH = 20 // world units; initial cloud spans x in [-20, 20]
 const REVEAL_START = 0.05
 const REVEAL_END = 0.12
 
+// The Gate (chapter 4) — in-flight screening. A rare impostor deflects out of
+// the gold stream and is permanently marked steel; 99.96% pass untouched.
+// GATE_AT = 3.5/7 sits mid chapter-4's u-range [3/7, 4/7]; the deflection acts
+// only inside the ±GATE_HALF route-window, then the route spring re-converges.
+const GATE_AT = 3.5 / 7
+const GATE_HALF = 0.04
+// Suspect = ~0.04% of particles (hash(instanceIndex + 31) < this). Verified:
+// hash(0 + 31) = 0.98 ≥ threshold, so the hero (instance 0) is never a suspect
+// — and the hero pin at the end of the kernel overrides any impulse regardless.
+const SUSPECT_THRESHOLD = 0.0004
+// Steel #5A6B7A — the screened-out currency's cool, inert tone.
+const STEEL = [0.353, 0.42, 0.478] as const
+
 /**
  * Per-particle phase along the route — the SAME expression is evaluated in the
  * update kernel (compute pass) and the material colorNode (render pass), and
@@ -99,6 +113,14 @@ const particleProgress = () => fract(hash(instanceIndex).add(time.mul(0.02)))
 
 /** Static per-particle wavelength for the prism dispersion, hue ∈ [0,1]. */
 const particleHue = () => hash(instanceIndex.add(777))
+
+/**
+ * 1 for the rare "suspect" particles the gate screens out, 0 otherwise — the
+ * SAME expression drives both the deflection impulse (kernel) and the steel
+ * tint (material), so the deflected specks and the steel specks are the exact
+ * same particles. A 0/1 multiply (not a branch) avoids warp divergence.
+ */
+const suspectFactor = () => select(hash(instanceIndex.add(31)).lessThan(SUSPECT_THRESHOLD), float(1), float(0))
 
 export function createRiver(count: number, routePoints: THREE.Vector3[]): River {
   const positions = instancedArray(count, 'vec3')
@@ -196,6 +218,16 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     const inWindow = prismWindow(progress)
     v.addAssign(prismFan(particleHue(), inWindow).mul(0.05).mul(dtScale))
 
+    // Gate screening: inside the gate window the rare suspects get a lateral +
+    // downward impulse — pushed DOWN and aside, out of the gold stream. The
+    // steering spring re-converges them once the phase drifts past the window
+    // (max deflection ~1.8 units, far under the 12-unit wrap-snap radius, so
+    // they oscillate near/below the route, never escape). Force → ×dtScale;
+    // × suspectFactor (0/1) so only suspects move. AFTER the wrap guard, same
+    // as the prism fan, so a wrap-snap can't fight it.
+    const inGateWindow = routeWindow(progress, GATE_AT, GATE_HALF)
+    v.addAssign(vec3(0, -0.9, 0.35).mul(inGateWindow).mul(0.08).mul(dtScale).mul(suspectFactor()))
+
     // Pointer repulsion (tactility proof).
     const toPointer = p.sub(uPointer)
     const dist = toPointer.length().max(0.0001)
@@ -239,6 +271,12 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
     spectral(particleHue()),
     prismWindow(bodyProgress),
   )
+  // Gate mark: a suspect's color shifts permanently to steel once its phase
+  // passes the gate. Progress-based smoothstep (like the prism tint) so it
+  // SURVIVES past the window — unlike the triangle deflection, it stays steel.
+  // Non-suspects: suspectFactor 0 → mix returns bodyColor unchanged.
+  const steeled = smoothstep(float(GATE_AT), float(GATE_AT + GATE_HALF), bodyProgress)
+  const screenedColor = mix(bodyColor, vec3(STEEL[0], STEEL[1], STEEL[2]), steeled.mul(suspectFactor()))
   // Hero conversion: once narrative time uT passes the prism, the hero's warm
   // gold permanently shifts to the "new currency" cool light — driven by uT
   // (not particle phase), so the change persists after the window.
@@ -256,7 +294,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[]): River 
   material.colorNode = select(
     isHero,
     vec4(heroColor, 1),
-    vec4(bodyColor, float(0.55).mul(uAlpha).mul(reveal)),
+    vec4(screenedColor, float(0.55).mul(uAlpha).mul(reveal)),
   )
   // Hero glow while alone: ×9 in the ch1 darkness (the lone "particle of light"
   // needs presence to carry the opening beat), easing back to its normal ×4 as

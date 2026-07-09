@@ -1,5 +1,6 @@
 import type { Node } from 'three/webgpu'
 import { Fn, float, smoothstep, vec3 } from 'three/tsl'
+import { routeWindow } from './windows'
 
 /**
  * Prism dispersion — the signature moment of the route. Around progress
@@ -26,8 +27,7 @@ export const spectral = Fn(([hue]: [Node<'float'>]) => {
 })
 
 /** Triangle window 0→1→0 across the prism: 1 at PRISM_AT, 0 beyond ±PRISM_HALF. */
-export const prismWindow = (progress: Node<'float'>) =>
-  float(1).sub(progress.sub(PRISM_AT).abs().div(PRISM_HALF).min(1))
+export const prismWindow = (progress: Node<'float'>) => routeWindow(progress, PRISM_AT, PRISM_HALF)
 
 /**
  * Lateral fan direction: spreads particles by wavelength inside the window
