@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { scrollToNarrative, timerLabel, narrativeSeconds } from './timeline'
+import { lerpAnchors, scrollToNarrative, timerLabel, narrativeSeconds, type ChapterAnchor } from './timeline'
 
 describe('scrollToNarrative', () => {
   it('clamps and eases the ends', () => {
@@ -24,6 +24,38 @@ describe('timerLabel', () => {
     // piecewise clock: mid-chapter-4 — 0.12 + (0.18-0.12)*0.5 = 0.150
     expect(timerLabel(0.5)).toBe('t = 0.150s')
     expect(timerLabel(1)).toBe('t = 0.400s')
+  })
+})
+
+describe('lerpAnchors', () => {
+  const anchors: ChapterAnchor[] = [
+    { id: 'a', u: 0, camOffset: [0, 0, 4], lookAhead: 0.02 },
+    { id: 'b', u: 0.5, camOffset: [2, 1, 8], lookAhead: 0.04 },
+    { id: 'c', u: 1, camOffset: [0, 4, 16], lookAhead: 0.08 },
+  ]
+
+  it('returns exact anchor values at anchor boundaries', () => {
+    expect(lerpAnchors(0, anchors)).toEqual({ camOffset: [0, 0, 4], lookAhead: 0.02 })
+    expect(lerpAnchors(0.5, anchors)).toEqual({ camOffset: [2, 1, 8], lookAhead: 0.04 })
+    expect(lerpAnchors(1, anchors)).toEqual({ camOffset: [0, 4, 16], lookAhead: 0.08 })
+  })
+
+  it('interpolates linearly at segment midpoints', () => {
+    const mid1 = lerpAnchors(0.25, anchors)
+    expect(mid1.camOffset[0]).toBeCloseTo(1, 10)
+    expect(mid1.camOffset[1]).toBeCloseTo(0.5, 10)
+    expect(mid1.camOffset[2]).toBeCloseTo(6, 10)
+    expect(mid1.lookAhead).toBeCloseTo(0.03, 10)
+    const mid2 = lerpAnchors(0.75, anchors)
+    expect(mid2.camOffset[0]).toBeCloseTo(1, 10)
+    expect(mid2.camOffset[1]).toBeCloseTo(2.5, 10)
+    expect(mid2.camOffset[2]).toBeCloseTo(12, 10)
+    expect(mid2.lookAhead).toBeCloseTo(0.06, 10)
+  })
+
+  it('clamps outside 0..1 to the first/last anchor', () => {
+    expect(lerpAnchors(-0.4, anchors)).toEqual({ camOffset: [0, 0, 4], lookAhead: 0.02 })
+    expect(lerpAnchors(1.7, anchors)).toEqual({ camOffset: [0, 4, 16], lookAhead: 0.08 })
   })
 })
 

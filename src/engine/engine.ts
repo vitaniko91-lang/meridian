@@ -2,7 +2,8 @@ import * as THREE from 'three/webgpu'
 import { chooseTier, detectEnv, type Tier } from './tiers'
 import { createFpsMeter } from './fps'
 import { createRiver } from './river'
-import { createRoute } from './route'
+import { CHAPTER_ANCHORS, CHAPTER_ANCHORS_PORTRAIT, createRoute } from './route'
+import { lerpAnchors } from './timeline'
 import { parseOverrides } from './overrides'
 
 export type Engine = {
@@ -82,7 +83,7 @@ export async function createEngine(
   // Scroll (src/scroll.ts) drives tTarget via setT; the loop smooths toward it.
   let tTarget = 0
   let tSmooth = 0
-  const camOffset = new THREE.Vector3(0, 1.2, 7)
+  const camOffset = new THREE.Vector3()
   const camPoint = new THREE.Vector3()
   const lookPoint = new THREE.Vector3()
 
@@ -96,16 +97,34 @@ export async function createEngine(
     lastTime = time
     tSmooth += (tTarget - tSmooth) * (1 - Math.pow(1 - 0.06, dt * 60))
     river.uT.value = tSmooth // hero particle rides with the camera
+    // Per-chapter framing: piecewise-lerped camera offset + look-ahead
+    // (route.ts CHAPTER_ANCHORS carry the composition intent per chapter;
+    // portrait viewports swap the hero keyframe — see route.ts).
+    const framing = lerpAnchors(
+      tSmooth,
+      camera.aspect < 1 ? CHAPTER_ANCHORS_PORTRAIT : CHAPTER_ANCHORS,
+    )
     route.curve.getPointAt(tSmooth, camPoint)
-    camera.position.copy(camPoint).add(camOffset)
-    route.curve.getPointAt(Math.min(tSmooth + 0.04, 1), lookPoint)
+    camera.position.copy(camPoint).add(camOffset.fromArray(framing.camOffset))
+    route.curve.getPointAt(Math.min(tSmooth + framing.lookAhead, 1), lookPoint)
     camera.lookAt(lookPoint)
     renderer.compute(river.update)
     renderer.render(scene, camera)
   })
 
   // exposed for later tasks
-  ;(globalThis as any).__meridian = { renderer, scene, camera, tier, river, route }
+  // anchors included as a live-tuning surface: the loop re-lerps CHAPTER_ANCHORS
+  // every frame, so console edits show up immediately (composition work).
+  ;(globalThis as any).__meridian = {
+    renderer,
+    scene,
+    camera,
+    tier,
+    river,
+    route,
+    anchors: CHAPTER_ANCHORS,
+    anchorsPortrait: CHAPTER_ANCHORS_PORTRAIT,
+  }
 
   // dev-only fps sweep instrument — lazy, zero cost without ?sweep
   // (startSweep is a module singleton, so a StrictMode double-mount can't double-start it)
