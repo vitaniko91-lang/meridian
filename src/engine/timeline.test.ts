@@ -30,14 +30,22 @@ describe('timerLabel', () => {
 describe('lerpAnchors', () => {
   const anchors: ChapterAnchor[] = [
     { id: 'a', u: 0, camOffset: [0, 0, 4], lookAhead: 0.02 },
-    { id: 'b', u: 0.5, camOffset: [2, 1, 8], lookAhead: 0.04 },
+    { id: 'b', u: 0.5, camOffset: [2, 1, 8], lookAhead: 0.04, lookYOffset: 3 },
     { id: 'c', u: 1, camOffset: [0, 4, 16], lookAhead: 0.08 },
   ]
 
   it('returns exact anchor values at anchor boundaries', () => {
-    expect(lerpAnchors(0, anchors)).toEqual({ camOffset: [0, 0, 4], lookAhead: 0.02 })
-    expect(lerpAnchors(0.5, anchors)).toEqual({ camOffset: [2, 1, 8], lookAhead: 0.04 })
-    expect(lerpAnchors(1, anchors)).toEqual({ camOffset: [0, 4, 16], lookAhead: 0.08 })
+    // lookYOffset defaults to 0 when an anchor omits it (a, c); present on b.
+    expect(lerpAnchors(0, anchors)).toEqual({ camOffset: [0, 0, 4], lookAhead: 0.02, lookYOffset: 0 })
+    expect(lerpAnchors(0.5, anchors)).toEqual({ camOffset: [2, 1, 8], lookAhead: 0.04, lookYOffset: 3 })
+    expect(lerpAnchors(1, anchors)).toEqual({ camOffset: [0, 4, 16], lookAhead: 0.08, lookYOffset: 0 })
+  })
+
+  it('interpolates lookYOffset (treating an absent field as 0)', () => {
+    // a.lookYOffset absent (0) → b.lookYOffset 3: quarter-point is 1.5
+    expect(lerpAnchors(0.25, anchors).lookYOffset).toBeCloseTo(1.5, 10)
+    // b (3) → c absent (0): three-quarter-point is 1.5
+    expect(lerpAnchors(0.75, anchors).lookYOffset).toBeCloseTo(1.5, 10)
   })
 
   it('interpolates linearly at segment midpoints', () => {
@@ -54,8 +62,8 @@ describe('lerpAnchors', () => {
   })
 
   it('clamps outside 0..1 to the first/last anchor', () => {
-    expect(lerpAnchors(-0.4, anchors)).toEqual({ camOffset: [0, 0, 4], lookAhead: 0.02 })
-    expect(lerpAnchors(1.7, anchors)).toEqual({ camOffset: [0, 4, 16], lookAhead: 0.08 })
+    expect(lerpAnchors(-0.4, anchors)).toEqual({ camOffset: [0, 0, 4], lookAhead: 0.02, lookYOffset: 0 })
+    expect(lerpAnchors(1.7, anchors)).toEqual({ camOffset: [0, 4, 16], lookAhead: 0.08, lookYOffset: 0 })
   })
 })
 

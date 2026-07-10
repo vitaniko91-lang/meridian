@@ -66,26 +66,47 @@ export const CHAPTER_ANCHORS: ChapterAnchor[] = [
  * every chapter, so every portrait anchor raises the camera (bigger +y) —
  * near-field river drops into the lower half, below the full-width text.
  * Tuned against the 768×1024 + 375×812 Playwright matrix (p3t1-*).
+ *
+ * `lookYOffset` (Plan-3 Task 6) is the decisive mobile legibility lever: it
+ * raises the look target above the route so screen center — which the ribbon
+ * tracks — sits ABOVE the river, sinking the whole band uniformly below the
+ * full-width copy without the tilt a camera-height change induces. Camera-Y
+ * and lookAhead only slide the band around the text column (it always crosses
+ * screen center where the metric row sits); the look bias moves it clear.
+ *
+ * Values calibrated so each chapter's river/crystal stays BELOW the metric row
+ * across the whole sticky reading window (section top AND ~mid-runway), while
+ * the band remains visible in the lower third. The STREAM anchors carry the
+ * strongest bias (instant 8) because peak-1's reveal sweeps the band up ~300px
+ * mid-runway; the rest are moderate so the river reads. Verified on the
+ * 375×812 + 390×844 matrix, snapshot + s0.5 mid-runway (p3t6c5-*, 2026-07-09).
  */
-const PORTRAIT_OVERRIDES: Record<string, Pick<ChapterAnchor, 'camOffset' | 'lookAhead'>> = {
+const PORTRAIT_OVERRIDES: Record<string, Pick<ChapterAnchor, 'camOffset' | 'lookAhead' | 'lookYOffset'>> = {
   // Hero rides very high (y 10.5) + max lookAhead: drops the ribbon out of the
   // 15px sub-copy at both 768/1024 and 375/812; the remaining headline
   // crossing is dim-fringe and stays legible (bold 800 white over speckle).
   hero: { camOffset: [-0.8, 10.5, 6.6], lookAhead: 0.2 },
-  // instant lookAhead 0.12 pitches the view up just enough to sink the near
-  // crest below the STREAM chapter's copy block (near-field responds to
-  // lookAhead, NOT to camera height — height responses invert for near arms)
-  instant: { camOffset: [0.8, 4.2, 6.0], lookAhead: 0.12 },
-  stream: { camOffset: [0.5, 6.0, 10], lookAhead: 0.17 },
-  routing: { camOffset: [-1.5, 8.5, 12], lookAhead: 0.06 },
-  gate: { camOffset: [-3.0, 6.5, 7.5], lookAhead: 0.1 },
-  prism: { camOffset: [0.0, 6.5, 7.5], lookAhead: 0.1 },
-  settlement: { camOffset: [-2.0, 6.6, 11.5], lookAhead: 0.05 },
+  // instant governs the STREAM chapter (its scroll-top uT lands just below the
+  // instant anchor). lookYOffset 8 holds peak-1's reveal band below the stream
+  // metric across the reading window — the reveal sweeps up ~300px mid-runway,
+  // so a lighter bias clears the section-top snapshot but not the dwell.
+  instant: { camOffset: [0.8, 4.2, 6.0], lookAhead: 0.12, lookYOffset: 8 },
+  // stream governs ROUTING's snapshot: kept moderate (5) so the routing river
+  // arc stays visible in the lower third rather than sinking off-screen.
+  stream: { camOffset: [0.5, 6.0, 10], lookAhead: 0.17, lookYOffset: 5 },
+  routing: { camOffset: [-1.5, 8.5, 12], lookAhead: 0.06, lookYOffset: 4 },
+  // gate 6: routing's deflection band grazed "…never" on the body's right edge
+  // mid-runway at 4; 6 sinks it clear while keeping the deflection in-frame.
+  gate: { camOffset: [-3.0, 6.5, 7.5], lookAhead: 0.1, lookYOffset: 6 },
+  prism: { camOffset: [0.0, 6.5, 7.5], lookAhead: 0.1, lookYOffset: 5 },
+  // settlement/paid crystals are locked (no reveal sweep) — a light bias opens
+  // a clean gap between the metric and the crystal's top edge.
+  settlement: { camOffset: [-2.0, 6.6, 11.5], lookAhead: 0.05, lookYOffset: 3 },
   // Portrait paid: much farther pull-back than landscape — at portrait the
   // contact form is near-full-width and screen center (≡ the pinned t=1 look
   // target) falls between the EMAIL and MESSAGE boxes; the extra distance
   // compresses the tail into a thin line that threads that corridor.
-  paid: { camOffset: [-9, 23.75, 38], lookAhead: 0.06 },
+  paid: { camOffset: [-9, 23.75, 38], lookAhead: 0.06, lookYOffset: 6 },
 }
 
 export const CHAPTER_ANCHORS_PORTRAIT: ChapterAnchor[] = CHAPTER_ANCHORS.map((a) =>

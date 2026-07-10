@@ -37,9 +37,18 @@ export type ChapterAnchor = {
   camOffset: [number, number, number]
   /** How far ahead along the route (in u) the camera looks. */
   lookAhead: number
+  /**
+   * World-units the look target is raised (above the route) before lookAt.
+   * Screen center rides the look target, and the ribbon hugs the route below
+   * it — so a positive bias sinks the whole river band DOWN the screen,
+   * uniformly, clearing the full-width mobile copy without tilting the band
+   * the way a camera-height change does. Portrait-only lever (landscape
+   * anchors omit it → 0). Default 0.
+   */
+  lookYOffset?: number
 }
 
-export type Framing = { camOffset: [number, number, number]; lookAhead: number }
+export type Framing = { camOffset: [number, number, number]; lookAhead: number; lookYOffset: number }
 
 /**
  * Piecewise-linear camera framing between chapter anchors by route progress u
@@ -49,8 +58,10 @@ export type Framing = { camOffset: [number, number, number]; lookAhead: number }
 export function lerpAnchors(u: number, anchors: readonly ChapterAnchor[]): Framing {
   const first = anchors[0]
   const last = anchors[anchors.length - 1]
-  if (u <= first.u) return { camOffset: [...first.camOffset], lookAhead: first.lookAhead }
-  if (u >= last.u) return { camOffset: [...last.camOffset], lookAhead: last.lookAhead }
+  if (u <= first.u)
+    return { camOffset: [...first.camOffset], lookAhead: first.lookAhead, lookYOffset: first.lookYOffset ?? 0 }
+  if (u >= last.u)
+    return { camOffset: [...last.camOffset], lookAhead: last.lookAhead, lookYOffset: last.lookYOffset ?? 0 }
   // >= so an exact anchor hit lands at f=0 (returns that anchor's values
   // exactly — no float drift from x + (y-x)*1). Guarded by the clamps above.
   let i = 0
@@ -66,5 +77,6 @@ export function lerpAnchors(u: number, anchors: readonly ChapterAnchor[]): Frami
       lp(a.camOffset[2], b.camOffset[2]),
     ],
     lookAhead: lp(a.lookAhead, b.lookAhead),
+    lookYOffset: lp(a.lookYOffset ?? 0, b.lookYOffset ?? 0),
   }
 }

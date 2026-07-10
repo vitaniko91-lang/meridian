@@ -135,6 +135,12 @@ export async function createEngine(
     route.curve.getPointAt(tSmooth, camPoint)
     camera.position.copy(camPoint).add(camOffset.fromArray(framing.camOffset))
     route.curve.getPointAt(Math.min(tSmooth + framing.lookAhead, 1), lookPoint)
+    // Raise the aim above the route (portrait-only in practice): screen center
+    // rides the look target and the ribbon hugs the route below it, so a
+    // positive bias sinks the whole river band below the full-width mobile copy
+    // without the tilt a camera-height change induces. heroBirth reads this same
+    // (biased) lookPoint so the born bead stays consistent with screen center.
+    lookPoint.y += framing.lookYOffset
     camera.lookAt(lookPoint)
 
     // Hero birth point: lookPoint projects to screen center, so nudge along the
