@@ -107,7 +107,11 @@ const GATE_HALF = 0.04
 // — and the hero pin at the end of the kernel overrides any impulse regardless.
 const SUSPECT_THRESHOLD = 0.0004
 // Steel #5A6B7A — the screened-out currency's cool, inert tone.
-const STEEL = [0.353, 0.42, 0.478] as const
+// Steel — the screened-out currency's cold, inert tone. Brightened from the base
+// palette #5A6B7A so the handful of tiny deflected specks read as a distinct cold
+// blue against the vault black (a literal #5A6B7A is too dark to catch the eye at
+// this size); still unmistakably steel, not a second accent.
+const STEEL = [0.47, 0.58, 0.72] as const
 
 // Settlement (chapter 6) — the climax: the stream crystallizes into a cubic
 // lattice (the settled ledger). Each particle derives its lattice slot from
@@ -268,7 +272,18 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
     const layer = idxF.div(side).floor() // floor(idx / side)
     const cellY = layer.sub(side.mul(layer.div(side).floor())) // layer mod side
     const cellZ = idxF.div(side.mul(side)).floor() // floor(idx / side²)
-    const grid = vec3(cellX, cellY, cellZ).sub(side.mul(0.5)).mul(latticePitch).add(uLatticeOrigin)
+    // Break the perfect-grid moiré: nudge each cell by up to ±18% of the pitch on
+    // each axis (per-particle hash). A mathematically perfect grid seen in
+    // perspective under additive blending aliases into sharp radiating moiré
+    // lines; this jitter reads as an organic crystal with thermal noise instead.
+    // ±0.18·pitch stays well under half a pitch, so cells never overlap — the
+    // cube is still unmistakably ordered, just not machined.
+    const jitter = vec3(
+      hash(instanceIndex.add(11)).sub(0.5),
+      hash(instanceIndex.add(22)).sub(0.5),
+      hash(instanceIndex.add(33)).sub(0.5),
+    ).mul(latticePitch * 0.36)
+    const grid = vec3(cellX, cellY, cellZ).sub(side.mul(0.5)).mul(latticePitch).add(uLatticeOrigin).add(jitter)
 
     // Crystallize blend (narrative-time). STAGGER per particle so slots lock in
     // hash order, not all at once — "staggered magnetic locking". `staggered`
@@ -318,14 +333,16 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
     v.addAssign(prismFan(particleHue(), inWindow).mul(0.05).mul(dtScale).mul(notLocked))
 
     // Gate screening: inside the gate window the rare suspects get a lateral +
-    // downward impulse — pushed DOWN and aside, out of the gold stream. The
-    // steering spring re-converges them once the phase drifts past the window
-    // (max deflection ~1.8 units, far under the 12-unit wrap-snap radius, so
-    // they oscillate near/below the route, never escape). Force → ×dtScale;
-    // × suspectFactor (0/1) so only suspects move. AFTER the wrap guard, same
-    // as the prism fan, so a wrap-snap can't fight it.
+    // downward impulse — pushed DOWN and aside, out of the gold stream. Deflection
+    // deepened (~4 units, still far under the 12-unit wrap-snap radius) so the few
+    // deflected specks separate clearly from the ribbon and read as "the rare
+    // impostor deflects into the cold" rather than a faint fringe. The steering
+    // spring re-converges them once the phase drifts past the window, so they
+    // oscillate below the route, never escape. Force → ×dtScale; × suspectFactor
+    // (0/1, unchanged count → the on-screen "99.96% pass" stays honest). AFTER the
+    // wrap guard, same as the prism fan, so a wrap-snap can't fight it.
     const inGateWindow = routeWindow(progress, GATE_AT, GATE_HALF)
-    v.addAssign(vec3(0, -0.9, 0.35).mul(inGateWindow).mul(0.08).mul(dtScale).mul(suspectFactor()).mul(notLocked))
+    v.addAssign(vec3(0, -1.5, 0.55).mul(inGateWindow).mul(0.11).mul(dtScale).mul(suspectFactor()).mul(notLocked))
 
     // Pointer repulsion (tactility proof).
     const toPointer = p.sub(uPointer)
@@ -394,7 +411,10 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
   // from gold each lap as its phase re-crosses the gate. Non-suspects:
   // suspectFactor 0 → mix returns bodyColor unchanged.
   const steeled = smoothstep(float(GATE_AT), float(GATE_AT + GATE_HALF), bodyProgress)
-  const screenedColor = mix(bodyColor, vec3(STEEL[0], STEEL[1], STEEL[2]), steeled.mul(suspectFactor()))
+  // 1 for a deflected suspect past the gate, else 0 — reused for the steel tint AND
+  // a sprite-size boost so the handful of screened-out specks actually read.
+  const steeledSuspect = steeled.mul(suspectFactor())
+  const screenedColor = mix(bodyColor, vec3(STEEL[0], STEEL[1], STEEL[2]), steeledSuspect)
   // Ch7 pull-back vista shimmer: once crystallized, each locked cell breathes at
   // a sub-1Hz rate (0.7 rad/s ≈ 0.11 Hz) with a per-particle phase (hash(idx))
   // so the crystal glimmers asynchronously — the settled ledger, alive but calm.
@@ -445,7 +465,7 @@ export function createRiver(count: number, routePoints: THREE.Vector3[], lattice
   material.scaleNode = float(0.02)
     .add(hash(instanceIndex).mul(0.02))
     .mul(uScale)
-    .mul(select(isHero, mix(float(9), float(4), reveal), float(1)))
+    .mul(select(isHero, mix(float(9), float(4), reveal), mix(float(1), float(2.4), steeledSuspect)))
 
   const mesh = new THREE.Sprite(material)
   mesh.count = count
