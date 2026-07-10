@@ -1,10 +1,15 @@
-# MERIDIAN — engine spike
+# MERIDIAN
 
-Award-showpiece particle-river engine spike for MERIDIAN, a fictional B2B
-payment-infrastructure brand (payments as light). Plan 1 proves the engine —
+**Live:** https://meridian-settlement.vercel.app
+
+Award-showpiece particle-river site for MERIDIAN, a fictional B2B
+payment-infrastructure brand (payments as light) — a scroll-driven narrative
+that slows a single payment four thousand times across seven chapters. Built on
 three.js r185 TSL on webgl2-first tiers, prism dispersion, Lenis+ScrollTrigger
-narrative time, reduced-motion zero-3D gate — before any art direction lands.
+narrative time, with a reduced-motion zero-3D fallback. Not a real company — a
+design/engineering showpiece by Vitalina Nikulina.
 
+- Deploy record + live smoke + launch checklist: [docs/spike/deploy.md](docs/spike/deploy.md)
 - Verdict + measured tiers + root-cause log: [docs/spike/verdict.md](docs/spike/verdict.md)
 - Design spec: [2026-07-06-meridian-showpiece-design.md](../../docs/superpowers/specs/2026-07-06-meridian-showpiece-design.md)
 

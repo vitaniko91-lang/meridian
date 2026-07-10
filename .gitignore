@@ -31,3 +31,4 @@ dist-ssr
 
 # Lighthouse HTML report (900KB bloat — JSON is the machine-readable record we keep)
 docs/qa/lighthouse-desktop.report.html
+.vercel

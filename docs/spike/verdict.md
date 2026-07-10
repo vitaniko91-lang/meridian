@@ -1,5 +1,8 @@
 # Engine spike verdict — MERIDIAN Plan 1
 
+> **Now LIVE:** https://meridian-settlement.vercel.app — deploy record, live smoke
+> + launch checklist in [deploy.md](deploy.md) (Plan 3 Task 9, 2026-07-10).
+
 **Date:** 2026-07-07
 **Decision:** GATE PASSED. Engine direction confirmed: three.js r185 TSL, **webgl2-first tiers**, WebGPU behind `?webgpu` opt-in. Prism dispersion: **GO**. Proceed to Plan 2 (art direction + chapters) on this engine.
 
