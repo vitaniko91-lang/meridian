@@ -14,7 +14,7 @@ gsap.registerPlugin(ScrollTrigger)
 // double-mount degrades gracefully instead of crashing the app).
 let active = false
 
-export function initScroll(onT: (t: number) => void, timerEl: HTMLElement) {
+export function initScroll(onT: (t: number, velocity: number) => void, timerEl: HTMLElement) {
   if (active) {
     console.warn('[meridian] initScroll: previous instance not disposed — returning no-op disposer')
     return () => {}
@@ -40,7 +40,7 @@ export function initScroll(onT: (t: number) => void, timerEl: HTMLElement) {
       // Intentional one-frame lag: three renders before the
       // gsap-ticker→lenis→ScrollTrigger chain samples scroll.
       const t = scrollToNarrative(self.progress)
-      onT(t)
+      onT(t, self.getVelocity()) // px/s — drives the audio bed's presence
       timerEl.textContent = timerLabel(t)
     },
   })

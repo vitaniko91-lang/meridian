@@ -9,12 +9,21 @@ import SiteHeader from './components/SiteHeader'
 import { CHAPTERS, CTA, HERO } from './content/copy'
 import { createEngine } from './engine/engine'
 import { initScroll } from './scroll'
+import { createAudio, type Audio } from './audio'
+
+// Persisted mute choice. Reduced-motion visitors never reach this component
+// (main.tsx routes them to AppStatic, which has no scroll and no audio), so the
+// default here is unmuted — but browsers still block sound until the first
+// gesture, so nothing plays until the visitor actually scrolls.
+const MUTE_KEY = 'meridian-muted'
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<Audio | null>(null)
   const [backend, setBackend] = useState('…')
+  const [muted, setMuted] = useState(() => localStorage.getItem(MUTE_KEY) === '1')
   // Dev HUD (fps meter + backend label) is decoration, not part of the design.
   // It stays in the DOM — the engine's createFpsMeter(hud) writes to hudRef —
   // but is hidden from layout AND the a11y tree unless `?debug`, so it never
@@ -26,6 +35,11 @@ export default function App() {
     let disposed = false
     let dispose = () => {}
     let disposeScroll = () => {}
+    // Synthesized soundscape (src/audio.ts). Created now, but silent until the
+    // engine boots AND the visitor's first scroll (a user gesture) unlocks the
+    // AudioContext — so it never autoplays.
+    const audio = createAudio(localStorage.getItem(MUTE_KEY) === '1')
+    audioRef.current = audio
     // Engine creation is deferred one tick: React StrictMode (dev) runs
     // effect → cleanup → effect synchronously, and the first timer is
     // cancelled before it fires, so only ONE engine is ever created per
@@ -40,8 +54,12 @@ export default function App() {
         .then((engine) => {
           if (disposed) return engine.dispose()
           dispose = engine.dispose
-          // scroll needs engine.setT, so it boots only after the engine resolves
-          disposeScroll = initScroll((t) => engine.setT(t), timerRef.current!)
+          // scroll needs engine.setT, so it boots only after the engine resolves;
+          // it also feeds the audio bed (velocity) + chapter tones (t)
+          disposeScroll = initScroll((t, v) => {
+            engine.setT(t)
+            audio.update(t, v)
+          }, timerRef.current!)
           setBackend(engine.tier.backend)
         })
         .catch((err) => {
@@ -57,8 +75,16 @@ export default function App() {
       ac.abort()
       disposeScroll() // stop driving setT before the engine goes away
       dispose()
+      audio.dispose()
+      audioRef.current = null
     }
   }, [])
+
+  const toggleSound = () => {
+    const next = audioRef.current?.toggleMute() ?? !muted
+    setMuted(next)
+    localStorage.setItem(MUTE_KEY, next ? '1' : '0')
+  }
 
   return (
     <>
@@ -68,7 +94,7 @@ export default function App() {
       >
         Skip to content
       </a>
-      <SiteHeader />
+      <SiteHeader sound={{ muted, onToggle: toggleSound }} />
       <canvas ref={canvasRef} className="fixed inset-0 -z-10 h-[100lvh] w-full" />
       <Ornament />
       <div ref={hudRef} aria-hidden="true" hidden={!debug} className="fixed right-3 top-3 font-mono text-xs text-gold" />
