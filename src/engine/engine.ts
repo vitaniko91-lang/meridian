@@ -184,12 +184,6 @@ export async function createEngine(
     anchorsPortrait: CHAPTER_ANCHORS_PORTRAIT,
   }
 
-  // dev-only fps sweep instrument — lazy, zero cost without ?sweep
-  // (startSweep is a module singleton, so a StrictMode double-mount can't double-start it)
-  if (location.search.includes('sweep')) {
-    void import('./sweep').then(({ startSweep }) => startSweep(tier))
-  }
-
   return {
     tier,
     setT(t: number) {

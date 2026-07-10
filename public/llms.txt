@@ -1,0 +1,15 @@
+# MERIDIAN
+
+> Fictional settlement-infrastructure brand — the 0.4 seconds between pay and paid. A portfolio showpiece by Vitalina Nikulina.
+
+MERIDIAN is a scroll-driven narrative site that slows a single payment four thousand times: seven chapters (instant, stream, routing, gate, prism, settlement, paid) trace value moving through a settlement layer as a river of light. Built with React, three.js (TSL/WebGPU-first) and a reduced-motion zero-3D fallback. Not a real company — a design/engineering showcase.
+
+## Site
+
+- [The story](https://meridian.example/#main): the 0.4-second journey, chapter by chapter
+- [Talk to us](https://meridian.example/#contact): contact form
+
+## Author
+
+- [Portfolio — Vitalina Nikulina](https://vitaniko91-lang.github.io/)
+- [LinkedIn](https://www.linkedin.com/in/vitalina-nikulina-0a3088215/)

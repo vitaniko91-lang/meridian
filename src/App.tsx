@@ -15,6 +15,11 @@ export default function App() {
   const hudRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<HTMLDivElement>(null)
   const [backend, setBackend] = useState('…')
+  // Dev HUD (fps meter + backend label) is decoration, not part of the design.
+  // It stays in the DOM — the engine's createFpsMeter(hud) writes to hudRef —
+  // but is hidden from layout AND the a11y tree unless `?debug`, so it never
+  // overlaps the header CTA in the default view (Plan-2 gate flag).
+  const debug = location.search.includes('debug')
 
   useEffect(() => {
     const ac = new AbortController()
@@ -66,9 +71,21 @@ export default function App() {
       <SiteHeader />
       <canvas ref={canvasRef} className="fixed inset-0 -z-10 h-[100lvh] w-full" />
       <Ornament />
-      <div ref={hudRef} className="fixed right-3 top-3 font-mono text-xs text-gold" />
-      <div className="fixed left-3 top-3 font-mono text-xs text-muted">{backend}</div>
-      <div ref={timerRef} aria-hidden="true" className="fixed bottom-3 left-3 font-mono text-sm text-gold">
+      <div ref={hudRef} aria-hidden="true" hidden={!debug} className="fixed right-3 top-3 font-mono text-xs text-gold" />
+      <div
+        aria-hidden="true"
+        hidden={!debug}
+        data-testid="backend"
+        className="fixed left-3 top-3 font-mono text-xs text-muted"
+      >
+        {backend}
+      </div>
+      <div
+        ref={timerRef}
+        data-testid="timer"
+        aria-hidden="true"
+        className="fixed bottom-3 left-3 font-mono text-sm text-gold"
+      >
         t = 0.000s
       </div>
       <main id="main" className="relative">

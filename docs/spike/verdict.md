@@ -66,7 +66,7 @@ Production preview, real Chrome, unattended playwright bench (`scripts/bench.mjs
 ## 6. Instruments in repo
 
 - `scripts/bench.mjs` — unattended fps matrix; run against the production preview.
-- `?sweep` in-page instrument — **KNOWN BUG:** a hidden-throttled 0.2fps sample is saved past the `document.hidden` guard. Superseded by bench.mjs; fix-or-delete in Plan 3.
+- `?sweep` in-page instrument — **DELETED in Plan 3** (Task 8): it had a hidden-throttled 0.2fps sampling bug (a sample saved past the `document.hidden` guard) and is superseded by `scripts/bench.mjs` (steady-state) + `scripts/bench-scroll.mjs` (scroll-motion).
 - Query overrides: `?count` `?dpr` `?webgl` `?webgpu` `?scale` `?alpha`.
 
 ## 7. Scroll-feel carry-forward (Task 6 review)
@@ -122,7 +122,7 @@ DPR-capped fps in headless emulation is **not** device truth (spec §11 adaptive
 | Entry + App JS | ≤ 500 KB | **~350 KB** (entry 60.7 + App 289.6; +SiteHeader 3.9 = 354) | ✅ ~70% of budget |
 | Total page weight (runtime) | ≤ 5 MB | **~0.4 MB** transferred / ~1.3 MB raw | ✅ far under |
 
-Raw chunk sizes: index (entry, React-only) 192 KB, App (three/gsap/lenis) 999 KB, SiteHeader 10 KB, CSS 14.7 KB, HTML 1.9 KB. Fonts (woff2, all four) 81 KB — only the preloaded italic (16 KB) is eager. `og.png` (236 KB) is crawler-only (og:image), never fetched by the page. The three.js chunk stays behind the dynamic import, so reduced-motion visitors fetch **zero** of it (Plan-1 §5).
+Raw chunk sizes: index (entry, React-only) 192 KB, App (three/gsap/lenis) 999 KB, SiteHeader 10 KB, CSS 16.6 KB (4.3 KB gzip), HTML 1.9 KB. Fonts (woff2, all four) 81 KB — only the preloaded italic (16 KB) is eager. `og.png` (236 KB) is crawler-only (og:image), never fetched by the page. The three.js chunk stays behind the dynamic import, so reduced-motion visitors fetch **zero** of it (Plan-1 §5).
 
 ### Lighthouse desktop — 100 / 100 / 100 on the three deterministic categories
 

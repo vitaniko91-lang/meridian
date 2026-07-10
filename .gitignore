@@ -12,6 +12,12 @@ dist
 dist-ssr
 *.local
 
+# Playwright
+/test-results
+/playwright-report
+/blob-report
+/.playwright
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +28,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Lighthouse HTML report (900KB bloat — JSON is the machine-readable record we keep)
+docs/qa/lighthouse-desktop.report.html

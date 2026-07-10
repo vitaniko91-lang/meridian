@@ -11,7 +11,9 @@ narrative time, reduced-motion zero-3D gate — before any art direction lands.
 ## Commands
 
 - `npm run dev` — dev server (StrictMode; NOT for benchmarking)
-- `npm test` — vitest logic suites (timeline, tiers, overrides, sweep)
+- `npm test` — vitest logic suites (timeline, tiers, overrides, route, windows)
+- `npm run e2e` — Playwright end-to-end + a11y suite (builds + previews on :5202
+  via `webServer`, then runs `e2e/*.spec.ts`; one command, no manual server)
 - `npm run build` — `tsc -b` + vite build
 - `npm run lint` — oxlint
 - `npm run preview` — production preview
@@ -20,10 +22,17 @@ narrative time, reduced-motion zero-3D gate — before any art direction lands.
 ## Dev instruments
 
 - Query overrides: `?count` `?dpr` `?webgl` `?webgpu` `?scale` `?alpha`
-- `?sweep` — in-page fps sweep. KNOWN BUG: a hidden-throttled ~0.2fps sample can
-  be saved past the `document.hidden` guard. Superseded by bench.mjs; fix-or-delete in Plan 3.
-- `scripts/bench.mjs` — unattended fps matrix. Run against a **production preview**
-  (`npm run build && npm run bench:serve`), never the dev server.
+- `?debug` — reveals the fps meter (top-right) + backend label (top-left). Off by
+  default (they're decoration; the label is kept in the DOM but `hidden`).
+- `scripts/bench.mjs` — unattended **steady-state** fps matrix (camera parked).
+  Run against a **production preview** (`npm run build && npm run bench:serve`),
+  never the dev server.
+- `scripts/bench-scroll.mjs` — **scroll-motion** fps: measures fps while the
+  narrative is scrubbed top→bottom (the true worst case). Same cold protocol —
+  read the header comment before trusting a number.
+
+The old in-page `?sweep` overlay was removed in Plan 3 (it had a hidden-throttle
+sampling bug and is superseded by the two `scripts/bench-*.mjs` instruments).
 
 ## Load-bearing constraints
 
