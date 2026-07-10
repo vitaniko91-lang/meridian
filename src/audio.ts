@@ -24,14 +24,16 @@ type ToneSpec = { partials: number[]; peak: number; attack: number; decay: numbe
 
 // Per-chapter bell voicings. Inharmonic-ish partials give a struck-metal timbre;
 // the fundamental sequence is a gentle rising line resolving down at Paid.
+// Bell peaks raised ~1.7× (2026-07-10 tuning: "drone quieter, bells more
+// noticeable") so the chapter tones sit clearly above the ambient bed.
 const TONES: ToneSpec[] = [
-  { partials: [146.83], peak: 0.05, attack: 0.01, decay: 2.6 }, // 1 Instant — D3, a single point of light in the dark
-  { partials: [220, 330], peak: 0.06, attack: 0.012, decay: 2.4 }, // 2 Stream — A3+E4, the river arrives, fuller
-  { partials: [261.63, 392], peak: 0.055, attack: 0.012, decay: 2.2 }, // 3 Routing — C4+G4
-  { partials: [329.63, 415.3], peak: 0.05, attack: 0.008, decay: 1.8 }, // 4 Gate — E4+G#4, a touch tense/bright
-  { partials: [392, 493.88, 587.33, 739.99], peak: 0.05, attack: 0.02, decay: 3.4 }, // 5 Prism — spectral chord bloom
-  { partials: [880, 1174.66, 1567.98], peak: 0.045, attack: 0.004, decay: 1.1 }, // 6 Settlement — crystalline high lock
-  { partials: [110, 164.81, 220], peak: 0.06, attack: 0.02, decay: 4.5 }, // 7 Paid — low warm resolve, "unremarkable as sunrise"
+  { partials: [146.83], peak: 0.085, attack: 0.01, decay: 2.8 }, // 1 Instant — D3, a single point of light in the dark
+  { partials: [220, 330], peak: 0.1, attack: 0.012, decay: 2.6 }, // 2 Stream — A3+E4, the river arrives, fuller
+  { partials: [261.63, 392], peak: 0.092, attack: 0.012, decay: 2.4 }, // 3 Routing — C4+G4
+  { partials: [329.63, 415.3], peak: 0.085, attack: 0.008, decay: 2.0 }, // 4 Gate — E4+G#4, a touch tense/bright
+  { partials: [392, 493.88, 587.33, 739.99], peak: 0.082, attack: 0.02, decay: 3.6 }, // 5 Prism — spectral chord bloom
+  { partials: [880, 1174.66, 1567.98], peak: 0.08, attack: 0.004, decay: 1.3 }, // 6 Settlement — crystalline high lock
+  { partials: [110, 164.81, 220], peak: 0.1, attack: 0.02, decay: 4.8 }, // 7 Paid — low warm resolve, "unremarkable as sunrise"
 ]
 
 // Bed drone frequencies (A1 sub, E2 fifth, A2 warmth) — a hollow open-fifth pad.
@@ -158,7 +160,9 @@ export function createAudio(initialMuted: boolean): Audio {
       // Velocity → bed presence + brightness (smoothed so it glides, not jerks).
       const v = Math.min(1, Math.abs(velocity) / 2000)
       if (ctx && bedGain && bedFilter) {
-        bedGain.gain.setTargetAtTime(0.02 + v * 0.075, ctx.currentTime, 0.3)
+        // Bed lowered ~2× (2026-07-10 tuning): base 0.009, up to ~0.045 at speed —
+        // the drone stays a quiet floor under the (now louder) chapter bells.
+        bedGain.gain.setTargetAtTime(0.009 + v * 0.036, ctx.currentTime, 0.3)
         bedFilter.frequency.setTargetAtTime(200 + v * 900, ctx.currentTime, 0.25)
       }
 
