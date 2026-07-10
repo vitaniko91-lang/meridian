@@ -108,3 +108,55 @@ The river ribbon tracks screen center (the `lookAt` target), so on a narrow full
 
 ### ⚠ MUST verify on a real device before Awwwards submission
 DPR-capped fps in headless emulation is **not** device truth (spec §11 adaptive-quality argument still stands; the Plan-1 thermal caveat too). Before submission, Vitalina must open the live site on a **real phone** and confirm: (1) sustained fps under scroll on a mid-range handset (the 100k tier is conservative but unmeasured on-device); (2) touch-scroll feel (Lenis syncTouch momentum vs native); (3) legibility in daylight; (4) no thermal throttling over a full scroll-through. This is a manual step — emulation covered layout, legibility, overflow, and touch-plumbing only.
+
+---
+
+## Performance gate (Plan 3 Task 7 — 2026-07-10)
+
+**Protocol caveat, up front.** Every fps number and the Lighthouse *performance* score below were captured on a MacBook Air that had been thermally soaked by days of benching **and** was under heavy concurrent load (system load average **5–15**, a full Chrome session + MCP servers running) throughout this pass. They are **THERMAL / LOAD-LIMITED**, not cold-hardware truth. The cold reference for the default tier is the Plan-1 gate: **webgl2 300k @ dpr2 = 60/60**. Before Awwwards submission, Vitalina must re-capture these on a fresh, idle machine — the cold protocol is documented in the `scripts/bench-scroll.mjs` header.
+
+### Bundle & page-weight budgets (spec §7) — PASS
+
+| Budget | Limit | Actual (gzip) | Verdict |
+|---|---|---|---|
+| Entry + App JS | ≤ 500 KB | **~350 KB** (entry 60.7 + App 289.6; +SiteHeader 3.9 = 354) | ✅ ~70% of budget |
+| Total page weight (runtime) | ≤ 5 MB | **~0.4 MB** transferred / ~1.3 MB raw | ✅ far under |
+
+Raw chunk sizes: index (entry, React-only) 192 KB, App (three/gsap/lenis) 999 KB, SiteHeader 10 KB, CSS 14.7 KB, HTML 1.9 KB. Fonts (woff2, all four) 81 KB — only the preloaded italic (16 KB) is eager. `og.png` (236 KB) is crawler-only (og:image), never fetched by the page. The three.js chunk stays behind the dynamic import, so reduced-motion visitors fetch **zero** of it (Plan-1 §5).
+
+### Lighthouse desktop — 100 / 100 / 100 on the three deterministic categories
+
+`npx lighthouse http://localhost:5202 --preset=desktop` → report: `docs/qa/lighthouse-desktop.report.{html,json}`.
+
+| Category | Score | Notes |
+|---|---|---|
+| Accessibility | **100** | Plan-2 a11y gate holds |
+| Best practices | **100** | no console errors, no deprecated APIs |
+| SEO | **100** | ← **was 91**; fixed this task |
+| Performance | 57 → **81** (load-variant) | see below — not a cheap-win category |
+
+Metrics (best run): **LCP 1.0 s · CLS 0.007 · TBT 360 ms · FCP 0.6 s**. LCP (the DOM hero H1) and CLS (the `fixed` canvas never shifts) are green; the perf **score** is the only soft number and it swung **57 → 81 between two runs minutes apart on identical code** (TBT 3,890 ms → 360 ms) purely with machine load — direct evidence the score tracks the box, not the code. A perfect 100 on a continuously-running full-screen WebGL particle simulation is not a realistic target (the rAF compute+render loop is main-thread work Lighthouse books as TBT); the genuinely fixable levers (LCP / CLS / robots) are all done. Cold re-run pending on real hardware.
+
+**SEO fix (the one real code change):** Lighthouse's `robots-txt` audit failed because the SPA returned `index.html` for `/robots.txt`. Added `public/robots.txt` (`User-agent: * / Allow: /`) → audit passes → **SEO 91 → 100**.
+
+### Scroll-motion fps — new instrument `scripts/bench-scroll.mjs` (thermal/load-limited)
+
+Smooth wheel-driven sweep top→bottom over 30 s (reached 95 % of page, narrative uT 0.987), sampling rAF into 1 s buckets — the moving-camera worst case (compute + camera rail + crystallization + prism/gate windows all in flight):
+
+| Measurement (same box, same session) | avg | p5 | min1s |
+|---|---|---|---|
+| **Scroll motion** (`bench-scroll.mjs`) | 27 | 22 | 19 |
+| **Steady-state parked** (`bench.mjs` protocol) | 16 | — | 12 |
+
+### 60 fps verdict + adaptive-quality decision — **NOT implemented (correctly)**
+
+Decision rule: wire adaptive quality only if the cold-ish scroll number genuinely fails **and** a `mesh.count` reduction demonstrably helps; if the failure is clearly just thermal (idle fps also low), do **not**.
+
+**It is unambiguously thermal / load.** The steady-state **parked** number (16 fps avg) is *lower* than the scroll number (27 fps avg) — physically impossible if scrolling caused a perf cliff (a scroll cliff would push scroll fps *below* parked). Both sit far under the Plan-1 cold reference (60/60) on this same default tier. The low numbers are the heat-soaked, load-avg-5–15 box, not a code path. Therefore:
+
+- **No tier drop** — desktop stays 300k.
+- **No adaptive quality wired** — `fps.ts` / `river.ts` are unchanged. Adding a count-reduction throttle here would be reacting to thermal noise, permanently degrading the art on healthy hardware to chase a measurement artifact.
+- **The lever stays documented and cheap** — `fps.ts` already meters 1 s buckets; a `<45 fps × 3 consecutive s → reduce mesh.count` callback is a ~15-line wire-up — available **if** cold on-device numbers ever justify it. Per spec §11 the argument still stands for low-end mobile, but that must be decided on real-device data (Task 6's ⚠), not this contaminated desktop box.
+
+### ⚠ Blocking item for Vitalina (real hardware)
+On a **cool, idle** machine (quit other browsers/servers; load avg < ~3): `npm run build && npm run bench:serve`, then `node scripts/bench-scroll.mjs` (point `BENCH_URL` at :5199) and `node scripts/bench.mjs`; re-run Lighthouse. Confirm **scroll fps ≥ 55 sustained** and **perf ≥ ~90** cold before Awwwards submission. Only if cold scroll fps *genuinely* fails should the documented adaptive-quality callback be implemented — and then only after verifying the `mesh.count` reduction actually raises fps.
