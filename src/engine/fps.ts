@@ -1,4 +1,4 @@
-export function createFpsMeter(el: HTMLElement, onSecond?: (fps: number) => void) {
+export function createFpsMeter(el: HTMLElement) {
   let frames = 0
   let last = performance.now()
   const samples: number[] = []
@@ -12,7 +12,6 @@ export function createFpsMeter(el: HTMLElement, onSecond?: (fps: number) => void
       el.textContent = `${fps} fps · p5 ${p5()}`
       frames = 0
       last = now
-      onSecond?.(fps) // adaptive-quality controller subscribes here
     }
   }
   function p5() {

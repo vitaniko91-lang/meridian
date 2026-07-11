@@ -22,22 +22,16 @@ export type Env = {
  * scripts/bench.mjs, background throttling disabled; avg fps / min 1s-bucket
  * over 6s after 3s warmup):
  *
- * webgl2 beats every WebGPU config at equal counts on this machine, so webgl2 is
- * the DEFAULT regardless of WebGPU availability; the WebGPU tiers stay reachable
- * via env.preferWebGPU (`?webgpu`) for other hardware / future three versions.
+ *   webgl2  300k @ dpr2 → 60 / 60   (the default tier)
+ *   webgl2  500k        → 31 / 26
+ *   webgpu  300k        → 40 / 35
+ *   webgpu  500k        → 28 / 25
+ *   webgpu    1M        → 14 / 13
  *
- * DEFAULT LOWERED 200k @ dpr1.5 (2026-07-11): the earlier 300k @ dpr2 "60/60"
- * came from a PARKED steady-state bench; scrolling through the settlement crystal
- * on a real (passively-cooled) MacBook Air only sustained ~36fps. On-device A/B
- * on the live site pinned the bottleneck to the PARTICLE COUNT, not fill-rate —
- * lowering dpr barely moved it, halving the count nearly doubled fps:
- *   300k @ dpr2   → 29    300k @ dpr1 → 30   (dpr ≈ irrelevant → not fill-bound)
- *   250k @ dpr1.5 → 38
- *   200k @ dpr1.5 → 57    ← new default (→ a solid 60 on a cool machine)
- *   150k @ dpr1.5 → 58
- * 200k is still a dense river (the additive glow fills it) and dpr1.5 stays crisp
- * on Retina. Fast machines can still opt into 1M via `?webgpu`. All numbers above
- * are from a thermally-soaked box — relative, not absolute; the ordering holds.
+ * The default webgl2 tier holds 60fps while every WebGPU config trails it at
+ * equal counts on this machine. So webgl2 is the DEFAULT regardless of WebGPU
+ * availability; the WebGPU tiers stay reachable via env.preferWebGPU
+ * (`?webgpu`) for re-benching on other hardware / future three versions.
  */
 export function chooseTier(env: Env): Tier {
   if (env.preferWebGPU && env.hasWebGPU) {
@@ -47,7 +41,7 @@ export function chooseTier(env: Env): Tier {
   }
   return env.isMobile
     ? { backend: 'webgl2', count: 100_000, maxDpr: 1.5 }
-    : { backend: 'webgl2', count: 200_000, maxDpr: 1.5 }
+    : { backend: 'webgl2', count: 300_000, maxDpr: 2 }
 }
 
 export function detectEnv(): Env {
