@@ -1,5 +1,7 @@
 # MERIDIAN
 
+> What happens in the 0.4 seconds between "pay" and "paid"?
+
 **Live:** https://meridian-settlement.vercel.app
 
 Award-showpiece particle-river site for MERIDIAN, a fictional B2B
@@ -23,6 +25,11 @@ design/engineering showpiece by Vitalina Nikulina.
 - `npm run lint` — oxlint
 - `npm run preview` — production preview
 - `npm run bench:serve` — production preview on :5199 for `scripts/bench.mjs`
+
+## Deployment
+
+Vercel is git-connected to this repo: a push to `main` auto-builds and deploys to
+the live URL above. No manual deploy step.
 
 ## Dev instruments
 
