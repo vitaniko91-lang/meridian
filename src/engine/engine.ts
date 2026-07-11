@@ -56,11 +56,50 @@ export async function createEngine(
     throw new DOMException('Engine creation aborted', 'AbortError')
   }
 
-  const fps = createFpsMeter(hud)
+  // Adaptive quality: keep the experience smooth on weak/passively-cooled GPUs by
+  // shedding render load until fps recovers, while fast machines keep full quality.
+  // dpr-FIRST (fill-rate): the settlement crystal's dense additive overdraw is the
+  // heaviest frame, and halving dpr quarters that fill — and it only softens the
+  // particle canvas, never the DOM copy. Particle count (draw) is the last resort.
+  // Monotonic down (never steps back up) so it can't oscillate; the reduction
+  // targets the worst scene the visitor reaches. Disabled when a manual ?dpr/?count
+  // override pins the tier (benchmarking).
+  const QUALITY_STEPS = [
+    { dpr: 1, count: 1 }, // full
+    { dpr: 0.8, count: 1 },
+    { dpr: 0.65, count: 1 },
+    { dpr: 0.55, count: 0.8 },
+    { dpr: 0.5, count: 0.6 }, // floor
+  ]
+  const adaptive = overrides.dpr === undefined && overrides.count === undefined
+  let qLevel = 0
+  let warmup = 0
+  let lowRun = 0
+  const applyQuality = () => {
+    const q = QUALITY_STEPS[qLevel]
+    renderer.setPixelRatio(Math.min(devicePixelRatio, tier.maxDpr * q.dpr))
+    renderer.setSize(innerWidth, innerHeight, false)
+    river.mesh.count = Math.floor(tier.count * q.count)
+  }
+  const onSecond = (f: number) => {
+    if (!adaptive) return
+    if (warmup < 2) {
+      warmup++ // let the scene + thermal settle before judging
+      return
+    }
+    lowRun = f < 50 ? lowRun + 1 : 0
+    if (lowRun >= 2 && qLevel < QUALITY_STEPS.length - 1) {
+      qLevel++
+      applyQuality()
+      lowRun = 0
+    }
+  }
+
+  const fps = createFpsMeter(hud, onSecond)
   const onResize = () => {
     camera.aspect = innerWidth / innerHeight
     camera.updateProjectionMatrix()
-    renderer.setPixelRatio(Math.min(devicePixelRatio, tier.maxDpr))
+    renderer.setPixelRatio(Math.min(devicePixelRatio, tier.maxDpr * QUALITY_STEPS[qLevel].dpr))
     renderer.setSize(innerWidth, innerHeight, false)
   }
   addEventListener('resize', onResize)
