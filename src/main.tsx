@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import { startAnalytics } from './lib/analytics'
 
 // Reduced-motion / zero-3D gate: the motion app (three/gsap/lenis) and the
 // static poster shell are BOTH dynamic imports, so the entry chunk carries
@@ -19,3 +20,5 @@ async function boot() {
   )
 }
 boot()
+
+void startAnalytics({ key: import.meta.env.VITE_POSTHOG_KEY, enabled: import.meta.env.PROD })
